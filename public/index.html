@@ -121,6 +121,26 @@
     </div>
   </section>
 
+  <section id="shareSection" class="card" style="display:none;margin-top:20px">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+      <div>
+        <h2 style="margin:0;color:var(--green)">Partager sur les réseaux sociaux</h2>
+        <div id="shareStatus" class="photo-meta">Le visuel utilise uniquement les photos originales vérifiées.</div>
+      </div>
+      <button id="shareNative" style="background:#b28b3f">📤 Partager le visuel</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:14px">
+      <button id="shareFacebook">Facebook</button>
+      <button id="shareInstagram" style="background:#7a4a72">Instagram</button>
+      <button id="shareLinkedin" style="background:#2867a6">LinkedIn</button>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px">
+      <button id="copyFacebook" style="background:#6f746f">Copier texte Facebook</button>
+      <button id="copyInstagram" style="background:#6f746f">Copier texte Instagram</button>
+      <button id="copyLinkedin" style="background:#6f746f">Copier texte LinkedIn</button>
+    </div>
+  </section>
+
   <section id="visualSection" class="card" style="display:none;margin-top:20px">
     <div class="visual-actions" style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px">
       <h2 style="margin:0;color:var(--green)">Visuel JML généré</h2>
@@ -518,6 +538,7 @@ async function renderJmlTemplate() {
   }
 
   $("visualSection").style.display="block";
+  $("shareSection").style.display="block";
 }
 
 $("load").addEventListener("click", async () => {
@@ -745,6 +766,74 @@ $("generateSocial").addEventListener("click", async () => {
   }
 });
 
+function currentListingUrl() {
+  return $("url").value.trim();
+}
+
+function currentSocialText(platform) {
+  return $(platform + "Copy")?.textContent?.trim() || "";
+}
+
+async function copySocialText(platform) {
+  const text = currentSocialText(platform);
+  if (!text || text === "—") {
+    alert("Prépare d'abord les textes pour les réseaux sociaux.");
+    return false;
+  }
+  await navigator.clipboard.writeText(text);
+  $("shareStatus").textContent = "✅ Texte " + platform + " copié dans le presse-papiers.";
+  return true;
+}
+
+function openSocial(url) {
+  window.open(url, "_blank", "noopener,noreferrer");
+}
+
+async function shareGeneratedVisual() {
+  const canvas = $("visual");
+  if (!canvas || !currentData?.listing) {
+    alert("Génère d'abord le visuel JML.");
+    return;
+  }
+
+  const ref = currentData.listing.reference || "annonce";
+  const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/png"));
+  if (!blob) {
+    alert("Impossible de préparer le visuel.");
+    return;
+  }
+
+  const file = new File([blob], "JML-" + ref + ".png", { type: "image/png" });
+  const text = currentSocialText("facebook") || currentSocialText("instagram") || "";
+  const shareData = {
+    title: "JML Immobilier — " + (currentData.listing.title || "Annonce"),
+    text,
+    url: currentListingUrl()
+  };
+
+  try {
+    if (navigator.share) {
+      if (!navigator.canShare || navigator.canShare({ files: [file] })) {
+        await navigator.share({ ...shareData, files: [file] });
+      } else {
+        await navigator.share(shareData);
+      }
+      $("shareStatus").textContent = "✅ Partage lancé. Choisis Facebook, Instagram, WhatsApp ou une autre application.";
+      return;
+    }
+  } catch (error) {
+    if (error?.name === "AbortError") return;
+  }
+
+  // Fallback desktop: download the original generated PNG.
+  const link = document.createElement("a");
+  link.download = "JML-" + ref + ".png";
+  link.href = URL.createObjectURL(blob);
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(link.href), 3000);
+  $("shareStatus").textContent = "📥 Le partage direct n'est pas disponible sur ce navigateur : le PNG a été téléchargé.";
+}
+
 $("download").addEventListener("click", () => {
   const ref = currentData?.listing?.reference || "annonce";
   const link = document.createElement("a");
@@ -752,6 +841,35 @@ $("download").addEventListener("click", () => {
   link.href = $("visual").toDataURL("image/png");
   link.click();
 });
+
+$("shareNative").addEventListener("click", shareGeneratedVisual);
+
+$("shareFacebook").addEventListener("click", async () => {
+  if (await copySocialText("facebook")) {
+    const url = currentListingUrl();
+    openSocial("https://www.facebook.com/sharer/sharer.php?u=" + encodeURIComponent(url));
+  }
+});
+
+$("shareInstagram").addEventListener("click", async () => {
+  if (await copySocialText("instagram")) {
+    // Instagram does not provide a web URL that pre-fills a post image/caption.
+    // The native share button above is the preferred path on mobile.
+    openSocial("https://www.instagram.com/");
+    $("shareStatus").textContent = "✅ Légende Instagram copiée. Ajoute le PNG téléchargé dans Instagram.";
+  }
+});
+
+$("shareLinkedin").addEventListener("click", async () => {
+  if (await copySocialText("linkedin")) {
+    const url = currentListingUrl();
+    openSocial("https://www.linkedin.com/sharing/share-offsite/?url=" + encodeURIComponent(url));
+  }
+});
+
+$("copyFacebook").addEventListener("click", () => copySocialText("facebook"));
+$("copyInstagram").addEventListener("click", () => copySocialText("instagram"));
+$("copyLinkedin").addEventListener("click", () => copySocialText("linkedin"));
 </script>
 </body>
 </html>
