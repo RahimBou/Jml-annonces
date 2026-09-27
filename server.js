@@ -303,7 +303,10 @@ app.post("/api/social/publish/facebook", async (req, res) => {
     const stored = readSocialAccounts(req);
     const account = stored.facebook;
     if (!account?.accessToken || !account?.pageId) {
-      return res.status(401).json({ ok:false, error:"Compte Facebook connecté ou Page Facebook introuvable." });
+      return res.status(401).json({
+        ok:false,
+        error:"Compte Facebook connecté ou Page Facebook introuvable."
+      });
     }
 
     const message = cleanText(req.body?.message || "");
@@ -317,12 +320,58 @@ app.post("/api/social/publish/facebook", async (req, res) => {
     if (!match) return res.status(400).json({ ok:false, error:"Format du visuel invalide." });
 
     const buffer = Buffer.from(match[2], "base64");
-    if (!buffer.length || buffer.length > 8 * 1024 * 1024) {
-      return res.status(413).json({ ok:false, error:"Le visuel est trop volumineux." });
+    if (!buffer.length || buffer.length > 10 * 1024 * 1024) {
+      return res.status(413).json({ ok:false, error:"Le visuel est trop volumineux pour Facebook." });
     }
 
-    // Build multipart/form-data manually so publication works consistently on
-    // Render without depending on a particular Node multipart implementation.
+    const graphVersion = process.env.META_GRAPH_VERSION || "v23.0";
+    const graphBase = "https://graph.facebook.com/" + graphVersion;
+    const metaError = (payload, fallback) => ({
+      ok:false,
+      error: payload?.error?.message || fallback,
+      metaCode: payload?.error?.code ?? null,
+      metaSubcode: payload?.error?.error_subcode ?? null,
+      metaType: payload?.error?.type ?? null
+    });
+
+    // Verify the Page token and the CREATE_CONTENT task before uploading.
+    const pageCheckResponse = await fetch(
+      graphBase + "/" + encodeURIComponent(account.pageId) +
+      "?fields=id,name&access_token=" + encodeURIComponent(account.accessToken)
+    );
+    const pageCheck = await pageCheckResponse.json();
+    if (!pageCheckResponse.ok || !pageCheck?.id) {
+      return res.status(502).json(metaError(
+        pageCheck,
+        "Le jeton Facebook de la Page n'est pas accepté par Meta."
+      ));
+    }
+
+    if (account.userAccessToken) {
+      const accountsResponse = await fetch(
+        graphBase + "/me/accounts?fields=id,name,tasks&access_token=" +
+        encodeURIComponent(account.userAccessToken)
+      );
+      const accountsPayload = await accountsResponse.json();
+      if (accountsResponse.ok && Array.isArray(accountsPayload.data)) {
+        const managedPage = accountsPayload.data.find(
+          item => String(item.id) === String(account.pageId)
+        );
+        const tasks = Array.isArray(managedPage?.tasks) ? managedPage.tasks : [];
+        if (tasks.length && !tasks.includes("PROFILE_PLUS_CREATE_CONTENT")) {
+          return res.status(403).json({
+            ok:false,
+            error:"Meta indique que le compte connecté ne possède pas la tâche CREATE_CONTENT sur cette Page.",
+            requiredTask:"PROFILE_PLUS_CREATE_CONTENT",
+            tasks
+          });
+        }
+      }
+    }
+
+    // Robust New Page Experience flow:
+    // 1) upload the exact JML visual as an unpublished Page photo;
+    // 2) create the actual Page feed post with that photo attached.
     const boundary = "----JMLFormBoundary" + crypto.randomBytes(12).toString("hex");
     const chunks = [];
     const addField = (name, value) => {
@@ -332,6 +381,7 @@ app.post("/api/social/publish/facebook", async (req, res) => {
         String(value) + "\r\n"
       ));
     };
+
     chunks.push(Buffer.from(
       "--" + boundary + "\r\n" +
       'Content-Disposition: form-data; name="source"; filename="JML-annonce.png"\r\n' +
@@ -339,49 +389,88 @@ app.post("/api/social/publish/facebook", async (req, res) => {
     ));
     chunks.push(buffer);
     chunks.push(Buffer.from("\r\n"));
-    // For Page photo publishing, Graph API expects the post text in
-    // the "message" field. Keep "published=true" explicit.
-    addField("message", message);
-    addField("published", "true");
+    addField("published", "false");
     addField("access_token", account.accessToken);
     chunks.push(Buffer.from("--" + boundary + "--\r\n"));
 
-    const body = Buffer.concat(chunks);
-    const graphVersion = process.env.META_GRAPH_VERSION || "v23.0";
-    const graphResponse = await fetch(
-      "https://graph.facebook.com/" + graphVersion + "/" + encodeURIComponent(account.pageId) + "/photos",
+    const uploadBody = Buffer.concat(chunks);
+    const uploadResponse = await fetch(
+      graphBase + "/" + encodeURIComponent(account.pageId) + "/photos",
       {
         method:"POST",
         headers:{
           "Content-Type":"multipart/form-data; boundary=" + boundary,
-          "Content-Length":String(body.length)
+          "Content-Length":String(uploadBody.length)
         },
-        body
+        body:uploadBody
       }
     );
-    const payload = await graphResponse.json();
+    const uploadPayload = await uploadResponse.json();
 
-    if (!graphResponse.ok || !payload?.id) {
-      const metaError = payload?.error;
+    if (!uploadResponse.ok || !uploadPayload?.id) {
+      return res.status(502).json(metaError(
+        uploadPayload,
+        "Meta n'a pas accepté le téléchargement du visuel JML."
+      ));
+    }
+
+    const photoId = String(uploadPayload.id);
+    const feedParams = new URLSearchParams();
+    feedParams.set("message", message);
+    feedParams.set("attached_media[0]", JSON.stringify({ media_fbid: photoId }));
+    feedParams.set("published", "true");
+    feedParams.set("access_token", account.accessToken);
+
+    const feedResponse = await fetch(
+      graphBase + "/" + encodeURIComponent(account.pageId) + "/feed",
+      {
+        method:"POST",
+        headers:{"Content-Type":"application/x-www-form-urlencoded"},
+        body:feedParams.toString()
+      }
+    );
+    const feedPayload = await feedResponse.json();
+
+    if (!feedResponse.ok || !feedPayload?.id) {
       return res.status(502).json({
-        ok:false,
-        error: metaError?.message || "Meta n'a pas accepté la publication.",
-        metaCode: metaError?.code ?? null,
-        metaSubcode: metaError?.error_subcode ?? null
+        ...metaError(
+          feedPayload,
+          "Le visuel a été transmis à Meta, mais Meta n'a pas créé la publication sur la Page."
+        ),
+        uploadedPhotoId: photoId
       });
+    }
+
+    let verified = false;
+    const verifyResponse = await fetch(
+      graphBase + "/" + encodeURIComponent(feedPayload.id) +
+      "?fields=id,message,created_time&access_token=" +
+      encodeURIComponent(account.accessToken)
+    );
+    if (verifyResponse.ok) {
+      const verifyPayload = await verifyResponse.json();
+      verified = String(verifyPayload?.id || "") === String(feedPayload.id);
     }
 
     res.json({
       ok:true,
       provider:"facebook",
-      postId:payload.id,
-      message:"Publication Facebook envoyée sur la Page connectée."
+      postId:feedPayload.id,
+      photoId,
+      verified,
+      pageId:account.pageId,
+      pageName:pageCheck.name || null,
+      message: verified
+        ? "Publication Facebook confirmée par Meta sur la Page connectée."
+        : "Meta a créé la publication ; sa vérification directe n'a pas pu être effectuée."
     });
   } catch (error) {
-    res.status(500).json({ ok:false, error:error.message || "Erreur lors de la publication Facebook." });
+    res.status(500).json({
+      ok:false,
+      error:error.message || "Erreur lors de la publication Facebook."
+    });
   }
 });
-
 app.post("/api/social/disconnect/:provider", (req, res) => {
   const provider = String(req.params.provider || "").toLowerCase();
   const stored = readSocialAccounts(req);
