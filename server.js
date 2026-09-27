@@ -621,17 +621,40 @@ function normalizeFactText(value) {
 }
 
 function factTokens(value) {
+  // Editorial vocabulary is allowed in social copy; property facts remain
+  // controlled separately. This prevents legitimate CTAs from being rejected.
   const stop = new Set([
     "le","la","les","un","une","des","de","du","d","et","avec","sans","a","au","aux",
     "en","sur","sous","dans","pour","par","plus","tres","très","situe","situé",
-    "situee","située","comprenant","comprend","possibilite","possibilité","voir","annonce"
+    "situee","située","comprenant","comprend","possibilite","possibilité","voir","annonce",
+    "decouvrez","découvrez","decouvrir","découvrir","nouveau","nouvelle","nouveauté",
+    "opportunite","opportunité","profitez","contactez","contact","visite","visiter",
+    "visitez","rendez","vous","aujourd","aujourd'hui","infos","informations",
+    "renseignements","disponible","disponibles","propose","proposé","proposée",
+    "retrouvez","trouver","trouvez","interesse","intéresse","interessez","intéressez",
+    "envie","besoin","projet","immobilier","immobilière","bien","propriete","propriété",
+    "maison","appartement","secteur","quartier","ideal","idéale","ideale","idéalement",
+    "exclusif","exclusive","magnifique","superbe","joli","jolie","local","locaux",
+    "venez","echange","échange","demande","message","messages","appelez","appeler",
+    "écrivez","ecrivez","repondre","répondre","facebook","instagram","linkedin","hashtags"
   ]);
   return [...new Set(
     normalizeFactText(value)
-      .split(/\\s+/)
+      .split(/\s+/)
       .map(x => x.replace(/^[^a-z0-9]+|[^a-z0-9]+$/g, ""))
       .filter(x => x.length >= 3 && !stop.has(x))
   )];
+}
+
+function groundedFactToken(token, corpus) {
+  if (!token) return true;
+  if (corpus.includes(token)) return true;
+  const corpusTokens = corpus.split(/\s+/).filter(Boolean);
+  return corpusTokens.some(sourceToken => {
+    if (sourceToken.length < 5 || token.length < 5) return false;
+    return sourceToken.startsWith(token.slice(0, 5)) ||
+      token.startsWith(sourceToken.slice(0, 5));
+  });
 }
 
 function buildFactCorpus(listing) {
@@ -659,7 +682,7 @@ function validateClaimAgainstListing(claim, listing) {
   // Generic editorial words are ignored; substantive words must appear in source facts.
   const unsupported = tokens.filter(token => {
     if (/^\\d+(?:[.,]\\d+)?$/.test(token)) return !corpus.includes(token);
-    return !corpus.includes(token);
+    return !groundedFactToken(token, corpus);
   });
 
   // Strong numeric guard: every number in a claim must exist in the source facts.
