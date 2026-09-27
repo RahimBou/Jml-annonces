@@ -1469,3 +1469,31 @@ app.get("/api/health", (_, res) => {
   const geminiConfigured = Boolean(process.env.GEMINI_API_KEY);
   const openaiConfigured = Boolean(process.env.OPENAI_API_KEY);
   const configuredModel = process.env.GEMINI_MODEL || "gemini-3.8-flash";
+  const metaAppConfigured = Boolean(process.env.META_APP_SECRET);
+  const metaAppIdValue = metaAppId();
+
+  res.json({
+    ok: true,
+    app: "jml-annonces",
+    version: "0.9.0",
+    meta: {
+      appId: metaAppIdValue,
+      configured: metaAppConfigured,
+      pageId: String(process.env.META_PAGE_ID || "156425008274121")
+    },
+    ai: {
+      preferredProvider: geminiConfigured ? "gemini" : openaiConfigured ? "openai" : "none",
+      geminiConfigured,
+      geminiModel: configuredModel,
+      openaiConfigured
+    },
+    photoPolicy: {
+      originalOnly: true,
+      generatedReplacementAllowed: false
+    }
+  });
+});
+
+app.listen(PORT, () => {
+  console.log(`JML Annonces listening on port ${PORT}`);
+});
