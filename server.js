@@ -447,6 +447,7 @@ app.post("/api/scrape", async (req, res) => {
       } catch {}
     }
 
+    listing.photos = validated;
     listing.images = validated.map((item) => item.url);
     listing.imageCount = listing.images.length;
     listing.photoExtraction.verifiedPhotoCount = listing.imageCount;
@@ -467,6 +468,13 @@ app.post("/api/scrape", async (req, res) => {
       !listing.photoExtraction.suspicious &&
       (listing.expectedPhotoCount == null || listing.imageCount === listing.expectedPhotoCount);
 
+    listing.photoStatus =
+      listing.imageCount === 0
+        ? "unreliable"
+        : !photoComplete
+          ? "partial"
+          : "complete";
+
     res.json({
       ok: true,
       listing,
@@ -475,7 +483,8 @@ app.post("/api/scrape", async (req, res) => {
         generatedReplacementAllowed: false,
         publishBlockedIfNoPhotos: listing.images.length === 0,
         publishBlockedIfIncomplete: !photoComplete,
-        publishAllowedForPhotoTest: photoComplete
+        publishAllowedForPhotoTest: photoComplete,
+        status: listing.photoStatus
       }
     });
   } catch (error) {
@@ -515,7 +524,7 @@ app.get("/api/image", async (req, res) => {
 });
 
 app.get("/api/health", (_, res) => {
-  res.json({ ok: true, app: "jml-annonces", version: "0.2.0" });
+  res.json({ ok: true, app: "jml-annonces", version: "0.3.0" });
 });
 
 app.listen(PORT, () => {
