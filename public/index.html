@@ -737,7 +737,7 @@ $("generateAI").addEventListener("click", async () => {
       "Publication autorisable sous réserve d'une dernière vérification humaine.";
 
     status.textContent =
-      "🟢 Gemini a préparé le contenu (" +
+      "🟢 Le moteur a préparé le contenu (" +
       (data.model || "modèle configuré") +
       "). Les photos restent 100 % originales.";
     await renderJmlTemplate();
@@ -751,14 +751,14 @@ $("generateAI").addEventListener("click", async () => {
 
 $("generateSocial").addEventListener("click", async () => {
   if (!currentData?.listing?.aiPlan) {
-    alert("Génère d'abord le visuel avec Gemini afin de contrôler les données.");
+    alert("Prépare d'abord le visuel JML (IA ou générateur local) afin de contrôler les données.");
     return;
   }
 
   const button = $("generateSocial");
   const controller = $("socialController");
   button.disabled = true;
-  controller.textContent = "⏳ Gemini prépare les 3 textes puis le contrôleur vérifie chaque information…";
+  controller.textContent = "⏳ Préparation des 3 textes puis contrôle de chaque information…";
 
   try {
     const response = await fetch("/api/social-copy", {
