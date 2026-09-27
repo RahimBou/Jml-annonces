@@ -10,6 +10,10 @@ const JML_HOST = "www.jml-immobilier.fr";
 app.use(express.json({ limit: "1mb" }));
 app.use(express.static(path.join(__dirname, "public")));
 
+// Meta requires stable, extensionless public URLs for the privacy and data-deletion pages.
+app.get("/privacy", (req, res) => res.sendFile(path.join(__dirname, "public", "privacy.html")));
+app.get("/data-deletion", (req, res) => res.sendFile(path.join(__dirname, "public", "data-deletion.html")));
+
 
 /* -------------------------------------------------------------------------- */
 /* Social accounts — OAuth connection only                                   */
