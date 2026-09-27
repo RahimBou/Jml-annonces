@@ -326,10 +326,8 @@ function normalizeFactText(value) {
 function factTokens(value) {
   const stop = new Set([
     "le","la","les","un","une","des","de","du","d","et","avec","sans","a","au","aux",
-    "en","sur","sous","dans","pour","par","plus","tres","très","grand","grande",
-    "petit","petite","beau","belle","agreable","agréable","charmant","charmante",
-    "situe","situé","situee","située","comprenant","comprend","possibilite","possibilité",
-    "plein","pied","espace","place","secteur","emplacement","vue","voir","annonce"
+    "en","sur","sous","dans","pour","par","plus","tres","très","situe","situé",
+    "situee","située","comprenant","comprend","possibilite","possibilité","voir","annonce"
   ]);
   return [...new Set(
     normalizeFactText(value)
