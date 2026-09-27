@@ -725,6 +725,60 @@ function validateGeneratedContent(listing, content) {
   };
 }
 
+function buildLocalSocialCopies(listing) {
+  const facts = {
+    type: listing.title || "",
+    reference: listing.reference || "",
+    price: listing.price || "",
+    location: listing.location || "",
+    surface: listing.surface || "",
+    terrain: listing.terrain || "",
+    rooms: listing.rooms != null ? String(listing.rooms) : "",
+    bedrooms: listing.bedrooms != null ? String(listing.bedrooms) : "",
+    highlights: Array.isArray(listing.aiPlan?.highlights)
+      ? listing.aiPlan.highlights
+      : (Array.isArray(listing.highlights) ? listing.highlights : [])
+  };
+
+  const headline = [
+    facts.type,
+    facts.location ? "à " + facts.location : ""
+  ].filter(Boolean).join(" ");
+
+  const details = [
+    facts.price ? "Prix : " + facts.price : "",
+    facts.surface ? "Surface : " + facts.surface : "",
+    facts.terrain ? "Terrain : " + facts.terrain : "",
+    facts.bedrooms ? facts.bedrooms + " chambres" : "",
+    facts.rooms ? facts.rooms + " pièces" : ""
+  ].filter(Boolean);
+
+  const keyFacts = facts.highlights.filter(Boolean).slice(0, 6);
+  const detailSentence = details.length ? details.join(" · ") + "." : "";
+  const highlightsSentence = keyFacts.length
+    ? "Points clés : " + keyFacts.join(" · ") + "."
+    : "";
+  const refSentence = facts.reference ? "Réf. " + facts.reference + "." : "";
+
+  return {
+    facebook: [
+      "🏠 " + (headline || "Nouveau bien à découvrir.") + ".",
+      detailSentence, highlightsSentence, refSentence,
+      "Pour organiser une visite, contactez-moi."
+    ].filter(Boolean).join("\n\n"),
+    instagram: [
+      "🏠 " + (headline || "Nouveau bien à découvrir.") + ".",
+      detailSentence, highlightsSentence, refSentence,
+      "#immobilier #Ardennes #CharlevilleMezieres #JMLImmobilier"
+    ].filter(Boolean).join("\n\n"),
+    linkedin: [
+      "Nouvelle annonce JML Immobilier : " + (headline || "bien immobilier") + ".",
+      detailSentence, highlightsSentence, refSentence,
+      "Informations présentées à partir des données de l'annonce source."
+    ].filter(Boolean).join("\n\n")
+  };
+}
+
 function extractHighlights(bodyText) {
   const source = cleanText(bodyText);
   const rules = [
@@ -1428,6 +1482,24 @@ app.post("/api/social-copy", async (req, res) => {
       description: listing.description || null,
       highlights: listing.aiPlan?.highlights || listing.highlights || []
     };
+
+    // Local mode is the reliable default: no API quota or external AI dependency.
+    // Set SOCIAL_TEXT_MODE=ai in Render only if AI-written copy is desired.
+    if ((process.env.SOCIAL_TEXT_MODE || "local").toLowerCase() !== "ai") {
+      const localCopies = buildLocalSocialCopies(listing);
+      return res.json({
+        ok: true,
+        model: "local-template",
+        provider: "deterministic",
+        copies: localCopies,
+        controller: {
+          status: "controlled",
+          platforms: 3,
+          rejected: 0,
+          rule: "Textes construits exclusivement à partir des données vérifiées de l'annonce source."
+        }
+      });
+    }
 
     const prompt = [
       "Tu es le rédacteur social media de JML Immobilier.",
