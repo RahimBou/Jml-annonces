@@ -41,7 +41,7 @@
     .fact b { display:block; font-size:18px; margin-top:4px; color:var(--green); }
     .photos { display:grid; grid-template-columns:repeat(3,1fr); gap:9px; }
     .photos img { width:100%; aspect-ratio:4/3; object-fit:cover; border-radius:11px; background:#f1eee7; display:block; }
-    .photo-warning { margin-top:12px; padding:12px 14px; border-radius:11px; background:#fbf4df; border:1px solid #ead9aa; color:#65552e; font-size:14px; font-weight:600; }
+    .photo-warning { margin-top:12px; padding:12px 14px; border-radius:11px; background:#fbf4df; border:1px solid #ead9aa; color:#65552e; font-size:14px; font-weight:600; }\n    .photo-meta { margin-top:8px; color:var(--muted); font-size:12px; line-height:1.45; }\n    .photo-blocked { background:#f9e8e8; border-color:#e4b8b8; color:#8b2d2d; }
     @media (max-width:800px) {
       .row, .grid { display:block; }
       button { margin-top:10px; width:100%; }
@@ -84,7 +84,7 @@
         <div>
           <h2>Photos originales récupérées</h2>
           <div id="photos" class="photos"></div>
-          <div id="photoWarning" class="photo-warning"></div>
+          <div id="photoWarning" class="photo-warning"></div>\n          <div id="photoMeta" class="photo-meta"></div>
         </div>
       </div>
     </section>
@@ -136,9 +136,23 @@ $("load").addEventListener("click", async () => {
         return;
       }
 
-      $("photoWarning").textContent = loadedCount
-        ? `✓ ${loadedCount} photo(s) originale(s) réellement chargée(s). Aucune photo IA ne sera utilisée.`
-        : "⚠ Aucune photo originale récupérée : la future publication devra rester bloquée.";
+      const extraction = p.photoExtraction || {};
+      const expected = p.expectedPhotoCount;
+      const complete = data.photoPolicy?.publishAllowedForPhotoTest === true;
+
+      $("photoWarning").classList.toggle("photo-blocked", !complete);
+      $("photoWarning").textContent = complete
+        ? `✓ ${loadedCount} photo(s) originale(s) vérifiée(s). La source est la galerie structurée de l'annonce. Aucune photo IA ne sera utilisée.`
+        : "⚠ Extraction photo non considérée comme complète : publication bloquée jusqu'à vérification.";
+
+      const expectedText = expected != null ? ` • ${loadedCount}/${expected} attendue(s)` : "";
+      const reasons = Array.isArray(extraction.reasons) && extraction.reasons.length
+        ? `<br>Motif : ${extraction.reasons.join(" ") }`
+        : "";
+
+      $("photoMeta").innerHTML =
+        `Source : ${extraction.source || "aucune"} • confiance : ${extraction.confidence || "faible"}${expectedText}` +
+        reasons;
     };
 
     const loadOriginalPhoto = (src) => new Promise((resolve) => {
