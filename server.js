@@ -515,7 +515,7 @@ app.get("/api/image", async (req, res) => {
 });
 
 app.get("/api/health", (_, res) => {
-  res.json({ ok: true, app: "jml-annonces", version: "0.1.0" });
+  res.json({ ok: true, app: "jml-annonces", version: "0.2.0" });
 });
 
 app.listen(PORT, () => {
