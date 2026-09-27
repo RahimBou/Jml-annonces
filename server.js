@@ -26,7 +26,15 @@ const SOCIAL_STATE_COOKIE = "jml_social_state";
 const SOCIAL_SECRET = process.env.SOCIAL_COOKIE_SECRET || process.env.JWT_SECRET || "";
 
 function appBaseUrl(req) {
-  return (process.env.APP_BASE_URL || `${req.protocol}://${req.get("host")}`).replace(/\/$/, "");
+  // Render terminates TLS at the proxy, so req.protocol can be "http"
+  // even though the public application URL is HTTPS. Never send Meta an
+  // insecure redirect_uri.
+  if (process.env.APP_BASE_URL) {
+    return process.env.APP_BASE_URL.replace(/\/$/, "");
+  }
+  const forwardedProto = String(req.headers["x-forwarded-proto"] || "").split(",")[0].trim();
+  const protocol = forwardedProto === "https" || req.secure ? "https" : "http";
+  return `${protocol}://${req.get("host")}`.replace(/\/$/, "");
 }
 
 function cookieMap(req) {
@@ -90,8 +98,13 @@ function configuredSocialProviders() {
 }
 
 function socialRedirectUri(req, provider) {
-  const envName = provider === "linkedin" ? "LINKEDIN_REDIRECT_URI" : "META_REDIRECT_URI";
-  return process.env[envName] || `${appBaseUrl(req)}/api/social/callback/${provider}`;
+  if (provider === "linkedin") {
+    return process.env.LINKEDIN_REDIRECT_URI || `${appBaseUrl(req)}/api/social/callback/linkedin`;
+  }
+  if (provider === "facebook") {
+    return process.env.META_FACEBOOK_REDIRECT_URI || `${appBaseUrl(req)}/api/social/callback/facebook`;
+  }
+  return process.env.META_INSTAGRAM_REDIRECT_URI || `${appBaseUrl(req)}/api/social/callback/instagram`;
 }
 
 app.get("/api/social/accounts", (req, res) => {
