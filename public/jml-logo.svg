@@ -1,11 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="900" height="240" viewBox="0 0 900 240">
-<rect width="900" height="240" fill="white"/>
-<g fill="none" stroke="#c7a24d" stroke-width="11" stroke-linecap="round" stroke-linejoin="round">
-<path d="M30 120 L155 28 L275 105 L390 35 L525 120"/><path d="M155 28V76 M390 35V83"/>
-</g>
-<g fill="#c7a24d"><rect x="137" y="82" width="32" height="32"/><rect x="181" y="82" width="32" height="32"/><rect x="159" y="126" width="32" height="45"/></g>
-<text x="35" y="202" font-family="Georgia,serif" font-size="72" font-weight="700" fill="#073b2a">JML</text>
-<text x="190" y="202" font-family="Georgia,serif" font-size="68" font-weight="700" fill="#c7a24d">IMMOBILIER</text>
-<text x="38" y="229" font-family="Arial,sans-serif" font-size="20" letter-spacing="2" fill="#555">VOTRE PROJET, NOTRE ENGAGEMENT</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="300" viewBox="0 0 1000 300">
+  <title>JML Immobilier</title>
+  <g fill="#b07a2a" stroke="#b07a2a" stroke-linecap="round" stroke-linejoin="round">
+    <text x="18" y="190" font-family="Georgia, 'Times New Roman', serif" font-size="92" font-weight="700" letter-spacing="-2">JML Immobilier</text>
+    <path d="M690 112 L835 22 L985 112" fill="none" stroke-width="10"/>
+    <path d="M835 22 L835 112" fill="none" stroke-width="10"/>
+    <path d="M930 100 L930 218 L885 218 L885 152" fill="none" stroke-width="10"/>
+    <path d="M690 112 C775 105 850 120 885 152 C902 168 916 188 930 218" fill="none" stroke-width="10"/>
+    <rect x="800" y="112" width="25" height="25" rx="1"/>
+    <rect x="835" y="112" width="25" height="25" rx="1"/>
+    <rect x="817" y="147" width="25" height="25" rx="1"/>
+  </g>
 </svg>
