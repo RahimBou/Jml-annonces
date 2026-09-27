@@ -87,7 +87,7 @@
             <div class="fact">Chambres<b id="bedrooms">—</b></div>
             <div class="fact">Pièces<b id="rooms">—</b></div>
           </div>
-          <div class="actions" style="display:flex;gap:10px;flex-wrap:wrap"><button id="generate">Générer le visuel JML</button><button id="generateAI" style="background:#b28b3f">✨ Générer avec ChatGPT</button></div>
+          <div class="actions" style="display:flex;gap:10px;flex-wrap:wrap"><button id="generate">Générer le visuel JML</button><button id="generateAI" style="background:#b28b3f">✨ Générer avec Gemini</button></div>
         </div>
         <div>
           <h2>Photos originales récupérées</h2>
@@ -470,14 +470,14 @@ $("generate").addEventListener("click", async () => {
 $("generateAI").addEventListener("click", async () => {
   if (!currentData) return;
   if (currentData.photoPolicy?.publishAllowedForPhotoTest !== true) {
-    alert("La galerie doit être complète et vérifiée avant d'utiliser ChatGPT.");
+    alert("La galerie doit être complète et vérifiée avant d'utiliser Gemini.");
     return;
   }
 
   const button = $("generateAI");
   const status = $("aiStatus");
   button.disabled = true;
-  status.textContent = "✨ ChatGPT analyse l'annonce et sélectionne les éléments à mettre en avant…";
+  status.textContent = "✨ Gemini analyse l'annonce et les photos originales…";
 
   try {
     const response = await fetch("/api/ai-layout", {
@@ -486,10 +486,10 @@ $("generateAI").addEventListener("click", async () => {
       body: JSON.stringify({ listing: currentData.listing })
     });
     const data = await response.json();
-    if (!response.ok || !data.ok) throw new Error(data.error || "ChatGPT n'est pas disponible.");
+    if (!response.ok || !data.ok) throw new Error(data.error || "Gemini n'est pas disponible.");
 
     currentData.listing.aiPlan = data.plan;
-    status.textContent = "🟢 ChatGPT a préparé le contenu. Les photos restent 100 % originales.";
+    status.textContent = "🟢 Gemini a préparé le contenu. Les photos restent 100 % originales.";
     await renderJmlTemplate();
     $("visualSection").scrollIntoView({ behavior: "smooth", block: "start" });
   } catch (error) {
