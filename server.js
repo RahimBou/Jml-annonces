@@ -295,8 +295,24 @@ function extractReference($, bodyText, sourceUrl) {
   const bodyMatch = String(bodyText || "").match(/(?:réf(?:érence)?|ref(?:erence)?)\s*[:#-]?\s*([A-Z0-9-]{2,20})/i);
   if (bodyMatch) return bodyMatch[1];
 
-  const urlMatch = String(sourceUrl || "").match(/(?:^|-)(\\d{2,})-[^/]+$/);
+  const urlMatch = String(sourceUrl || "").match(/(?:^|-)(\d{2,})-[^/]+$/);
   return urlMatch ? urlMatch[1] : null;
+}
+
+function extractLogoUrl($) {
+  const selectors = [
+    "img[src*='logo' i]",
+    "img[data-src*='logo' i]",
+    "img[data-original*='logo' i]"
+  ];
+
+  for (const selector of selectors) {
+    const el = $(selector).first();
+    const value = el.attr("src") || el.attr("data-src") || el.attr("data-original");
+    const url = absoluteUrl(value);
+    if (url) return url;
+  }
+  return null;
 }
 
 function extractHighlights(bodyText) {
@@ -405,6 +421,7 @@ function parseListing(html, sourceUrl) {
   const title = structured.name || firstText($, ["h1", "title"]);
   const reference = extractReference($, bodyText, sourceUrl);
   const highlights = extractHighlights(bodyText);
+  const logoUrl = extractLogoUrl($);
   const photoExtraction = collectImages($);
   const images = photoExtraction.images;
   const expectedPhotoCount = extractExpectedPhotoCount($, bodyText);
@@ -413,6 +430,7 @@ function parseListing(html, sourceUrl) {
     title,
     reference,
     highlights,
+    logoUrl,
     price: structured.price ? parsePrice(structured.price + " €") : extractPrice($, bodyText),
     sourceUrl,
     location: structured.location || null,
@@ -575,7 +593,7 @@ app.get("/api/image", async (req, res) => {
 });
 
 app.get("/api/health", (_, res) => {
-  res.json({ ok: true, app: "jml-annonces", version: "0.4.0" });
+  res.json({ ok: true, app: "jml-annonces", version: "0.5.0" });
 });
 
 app.listen(PORT, () => {
