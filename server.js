@@ -1,5 +1,6 @@
 const express = require("express");
 const path = require("path");
+const crypto = require("crypto");
 const cheerio = require("cheerio");
 
 const app = express();
@@ -8,6 +9,262 @@ const JML_HOST = "www.jml-immobilier.fr";
 
 app.use(express.json({ limit: "1mb" }));
 app.use(express.static(path.join(__dirname, "public")));
+
+
+/* -------------------------------------------------------------------------- */
+/* Social accounts — OAuth connection only                                   */
+/* Publication remains a deliberate human action in the UI.                  */
+/* Tokens are encrypted in an HttpOnly cookie so no password is ever stored. */
+/* -------------------------------------------------------------------------- */
+
+const SOCIAL_COOKIE = "jml_social";
+const SOCIAL_STATE_COOKIE = "jml_social_state";
+const SOCIAL_SECRET = process.env.SOCIAL_COOKIE_SECRET || process.env.JWT_SECRET || "CHANGE_ME_SOCIAL_SECRET";
+
+function appBaseUrl(req) {
+  return (process.env.APP_BASE_URL || `${req.protocol}://${req.get("host")}`).replace(/\/$/, "");
+}
+
+function cookieMap(req) {
+  const header = req.headers.cookie || "";
+  return Object.fromEntries(header.split(";").map(part => {
+    const i = part.indexOf("=");
+    return i > -1 ? [part.slice(0,i).trim(), decodeURIComponent(part.slice(i+1))] : null;
+  }).filter(Boolean));
+}
+
+function cookieFlags(maxAge) {
+  return [
+    "Path=/",
+    "HttpOnly",
+    "SameSite=Lax",
+    process.env.NODE_ENV === "production" ? "Secure" : "",
+    maxAge != null ? "Max-Age=" + maxAge : ""
+  ].filter(Boolean).join("; ");
+}
+
+function setCookie(res, name, value, maxAge) {
+  res.setHeader("Set-Cookie", `${name}=${encodeURIComponent(value)}; ${cookieFlags(maxAge)}`);
+}
+
+function encryptSocialPayload(payload) {
+  const key = crypto.createHash("sha256").update(SOCIAL_SECRET).digest();
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
+  const encrypted = Buffer.concat([cipher.update(JSON.stringify(payload), "utf8"), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return Buffer.concat([iv, tag, encrypted]).toString("base64url");
+}
+
+function decryptSocialPayload(value) {
+  try {
+    const raw = Buffer.from(String(value || ""), "base64url");
+    if (raw.length < 29) return null;
+    const key = crypto.createHash("sha256").update(SOCIAL_SECRET).digest();
+    const iv = raw.subarray(0, 12);
+    const tag = raw.subarray(12, 28);
+    const encrypted = raw.subarray(28);
+    const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv);
+    decipher.setAuthTag(tag);
+    return JSON.parse(Buffer.concat([decipher.update(encrypted), decipher.final()]).toString("utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function readSocialAccounts(req) {
+  const cookies = cookieMap(req);
+  return decryptSocialPayload(cookies[SOCIAL_COOKIE]) || {};
+}
+
+function configuredSocialProviders() {
+  return {
+    facebook: Boolean(process.env.META_APP_ID && process.env.META_APP_SECRET),
+    instagram: Boolean(process.env.META_APP_ID && process.env.META_APP_SECRET),
+    linkedin: Boolean(process.env.LINKEDIN_CLIENT_ID && process.env.LINKEDIN_CLIENT_SECRET)
+  };
+}
+
+function socialRedirectUri(req, provider) {
+  const envName = provider === "linkedin" ? "LINKEDIN_REDIRECT_URI" : "META_REDIRECT_URI";
+  return process.env[envName] || `${appBaseUrl(req)}/api/social/callback/${provider}`;
+}
+
+app.get("/api/social/accounts", (req, res) => {
+  const stored = readSocialAccounts(req);
+  const configured = configuredSocialProviders();
+  res.json({
+    ok: true,
+    configured: Object.values(configured).some(Boolean),
+    accounts: {
+      facebook: { connected: Boolean(stored.facebook?.accessToken), name: stored.facebook?.name || null },
+      instagram: { connected: Boolean(stored.instagram?.accessToken), name: stored.instagram?.name || null },
+      linkedin: { connected: Boolean(stored.linkedin?.accessToken), name: stored.linkedin?.name || null }
+    },
+    note: "Les comptes sont uniquement connectés. La publication nécessite une action explicite."
+  });
+});
+
+app.get("/api/social/connect/:provider", (req, res) => {
+  const provider = String(req.params.provider || "").toLowerCase();
+  const config = configuredSocialProviders();
+  if (!["facebook","instagram","linkedin"].includes(provider)) {
+    return res.status(400).send("Réseau social non pris en charge.");
+  }
+  if (!config[provider]) {
+    return res.status(503).send(
+      "Connexion " + provider + " non configurée. Ajoutez les identifiants OAuth correspondants dans Render."
+    );
+  }
+
+  const state = crypto.randomBytes(24).toString("hex");
+  setCookie(res, SOCIAL_STATE_COOKIE, encryptSocialPayload({
+    state,
+    provider,
+    createdAt: Date.now()
+  }), 600);
+
+  if (provider === "linkedin") {
+    const params = new URLSearchParams({
+      response_type: "code",
+      client_id: process.env.LINKEDIN_CLIENT_ID,
+      redirect_uri: socialRedirectUri(req, "linkedin"),
+      state,
+      scope: process.env.LINKEDIN_SCOPES || "openid profile w_member_social"
+    });
+    return res.redirect("https://www.linkedin.com/oauth/v2/authorization?" + params.toString());
+  }
+
+  const params = new URLSearchParams({
+    client_id: process.env.META_APP_ID,
+    redirect_uri: socialRedirectUri(req, provider),
+    state,
+    response_type: "code",
+    scope: process.env.META_SCOPES ||
+      "pages_show_list,pages_read_engagement,pages_manage_posts,instagram_basic,instagram_content_publish"
+  });
+  return res.redirect("https://www.facebook.com/dialog/oauth?" + params.toString());
+});
+
+app.get("/api/social/callback/:provider", async (req, res) => {
+  const provider = String(req.params.provider || "").toLowerCase();
+  const cookies = cookieMap(req);
+  const stateData = decryptSocialPayload(cookies[SOCIAL_STATE_COOKIE]);
+  setCookie(res, SOCIAL_STATE_COOKIE, "", 0);
+
+  if (!stateData || stateData.provider !== provider || stateData.state !== String(req.query.state || "")) {
+    return res.status(400).send("Connexion sociale refusée : état OAuth invalide.");
+  }
+  if (req.query.error) {
+    return res.status(400).send("Connexion annulée : " + String(req.query.error_description || req.query.error));
+  }
+
+  try {
+    const code = String(req.query.code || "");
+    if (!code) throw new Error("Code OAuth manquant.");
+
+    const stored = readSocialAccounts(req);
+
+    if (provider === "linkedin") {
+      const tokenResponse = await fetch("https://www.linkedin.com/oauth/v2/accessToken", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          grant_type: "authorization_code",
+          code,
+          client_id: process.env.LINKEDIN_CLIENT_ID,
+          client_secret: process.env.LINKEDIN_CLIENT_SECRET,
+          redirect_uri: socialRedirectUri(req, "linkedin")
+        })
+      });
+      const token = await tokenResponse.json();
+      if (!tokenResponse.ok || !token.access_token) {
+        throw new Error(token?.error_description || "LinkedIn n'a pas fourni de jeton d'accès.");
+      }
+
+      let name = "Compte LinkedIn";
+      const profileResponse = await fetch("https://api.linkedin.com/v2/userinfo", {
+        headers: { Authorization: "Bearer " + token.access_token }
+      });
+      if (profileResponse.ok) {
+        const profile = await profileResponse.json();
+        name = profile.name || profile.given_name || name;
+      }
+
+      stored.linkedin = {
+        accessToken: token.access_token,
+        refreshToken: token.refresh_token || null,
+        expiresAt: Date.now() + Number(token.expires_in || 0) * 1000,
+        name
+      };
+    } else {
+      const tokenUrl = "https://graph.facebook.com/" +
+        (process.env.META_GRAPH_VERSION || "v23.0") + "/oauth/access_token";
+      const tokenResponse = await fetch(tokenUrl + "?" + new URLSearchParams({
+        client_id: process.env.META_APP_ID,
+        client_secret: process.env.META_APP_SECRET,
+        redirect_uri: socialRedirectUri(req, provider),
+        code
+      }).toString());
+      const token = await tokenResponse.json();
+      if (!tokenResponse.ok || !token.access_token) {
+        throw new Error(token?.error?.message || "Meta n'a pas fourni de jeton d'accès.");
+      }
+
+      // Retrieve the Pages the user can manage. If an Instagram professional
+      // account is linked to a Page, its instagram_business_account is exposed here.
+      const pagesResponse = await fetch(
+        "https://graph.facebook.com/" + (process.env.META_GRAPH_VERSION || "v23.0") +
+        "/me/accounts?fields=id,name,access_token,instagram_business_account&access_token=" +
+        encodeURIComponent(token.access_token)
+      );
+      const pagesPayload = await pagesResponse.json();
+      if (!pagesResponse.ok) {
+        throw new Error(pagesPayload?.error?.message || "Impossible de récupérer les Pages Meta.");
+      }
+
+      const pages = Array.isArray(pagesPayload.data) ? pagesPayload.data : [];
+      const page = pages[0] || null;
+      if (page) {
+        stored.facebook = {
+          accessToken: page.access_token || token.access_token,
+          userAccessToken: token.access_token,
+          pageId: page.id,
+          name: page.name || "Page Facebook"
+        };
+
+        const igId = page.instagram_business_account?.id;
+        if (igId) {
+          stored.instagram = {
+            accessToken: page.access_token || token.access_token,
+            instagramBusinessAccountId: igId,
+            pageId: page.id,
+            name: "Instagram professionnel"
+          };
+        }
+      } else {
+        stored.facebook = {
+          accessToken: token.access_token,
+          userAccessToken: token.access_token,
+          name: "Compte Facebook"
+        };
+      }
+    }
+
+    setCookie(res, SOCIAL_COOKIE, encryptSocialPayload(stored), 60 * 60 * 24 * 60);
+    return res.redirect("/?social=connected");
+  } catch (error) {
+    return res.status(502).send("Connexion " + provider + " impossible : " + error.message);
+  }
+});
+
+app.post("/api/social/disconnect/:provider", (req, res) => {
+  const provider = String(req.params.provider || "").toLowerCase();
+  const stored = readSocialAccounts(req);
+  delete stored[provider];
+  setCookie(res, SOCIAL_COOKIE, encryptSocialPayload(stored), 60 * 60 * 24 * 60);
+  res.json({ ok: true });
+});
 
 function normalizeUrl(value) {
   const url = new URL(value);
