@@ -121,6 +121,21 @@
     </div>
   </section>
 
+  <section id="accountsSection" class="card" style="margin-top:20px">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+      <div>
+        <h2 style="margin:0;color:var(--green)">🔐 Mes comptes sociaux</h2>
+        <div id="accountsStatus" class="photo-meta">Connecte tes comptes une seule fois. Aucune publication ne partira sans ta validation.</div>
+      </div>
+      <button id="refreshAccounts" style="background:#6f746f">Actualiser</button>
+    </div>
+    <div id="socialAccounts" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:14px">
+      <div class="fact" id="accountFacebook"><b>Facebook</b><span>⚪ Non connecté</span><button data-provider="facebook" class="connectSocial" style="margin-top:10px">Connecter</button></div>
+      <div class="fact" id="accountInstagram"><b>Instagram</b><span>⚪ Non connecté</span><button data-provider="instagram" class="connectSocial" style="margin-top:10px">Connecter</button></div>
+      <div class="fact" id="accountLinkedin"><b>LinkedIn</b><span>⚪ Non connecté</span><button data-provider="linkedin" class="connectSocial" style="margin-top:10px">Connecter</button></div>
+    </div>
+  </section>
+
   <section id="shareSection" class="card" style="display:none;margin-top:20px">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
       <div>
@@ -765,6 +780,35 @@ $("generateSocial").addEventListener("click", async () => {
     button.disabled = false;
   }
 });
+
+async function loadSocialAccounts() {
+  try {
+    const response = await fetch("/api/social/accounts");
+    const data = await response.json();
+    const accounts = data.accounts || {};
+    for (const provider of ["facebook","instagram","linkedin"]) {
+      const card = $("account" + provider.charAt(0).toUpperCase() + provider.slice(1));
+      if (!card) continue;
+      const connected = accounts[provider]?.connected === true;
+      const name = accounts[provider]?.name || accounts[provider]?.pageName || "";
+      const button = card.querySelector(".connectSocial");
+      card.querySelector("span").textContent = connected ? "🟢 Connecté" + (name ? " · " + name : "") : "⚪ Non connecté";
+      button.textContent = connected ? "Reconnecter" : "Connecter";
+    }
+    $("accountsStatus").textContent = data.configured === false
+      ? "⚠️ Les identifiants OAuth ne sont pas encore configurés sur Render."
+      : "Les comptes sont connectés séparément. La publication reste toujours manuelle.";
+  } catch {
+    $("accountsStatus").textContent = "Impossible de vérifier les comptes sociaux.";
+  }
+}
+document.querySelectorAll(".connectSocial").forEach(button => {
+  button.addEventListener("click", () => {
+    window.location.href = "/api/social/connect/" + button.dataset.provider;
+  });
+});
+$("refreshAccounts").addEventListener("click", loadSocialAccounts);
+loadSocialAccounts();
 
 function currentListingUrl() {
   return $("url").value.trim();
