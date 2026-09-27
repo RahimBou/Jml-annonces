@@ -491,7 +491,7 @@ async function renderJmlTemplate() {
   ctx.fillStyle=GOLD;
   ctx.fillRect(900,FOOTER_Y+17,2,68);
 
-  const bottomLogo = await loadLocalCanvasImage("/jml-logo.svg");
+  const bottomLogo = await loadLocalCanvasImage("/jml-logo-officiel.svg");
   if (bottomLogo) {
     ctx.drawImage(bottomLogo,925,FOOTER_Y+3,255,96);
   }
