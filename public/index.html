@@ -897,10 +897,49 @@ $("download").addEventListener("click", () => {
 $("shareNative").addEventListener("click", shareGeneratedVisual);
 
 $("shareFacebook").addEventListener("click", async () => {
-  if (await copySocialText("facebook")) {
-    const url = currentListingUrl();
-    openSocial("https://www.facebook.com/sharer/sharer.php?u=" + encodeURIComponent(url));
+  const text = currentSocialText("facebook");
+  if (!text || text === "—") {
+    alert("Prépare d'abord le texte Facebook.");
+    return;
   }
+  if (!currentData?.listing) {
+    alert("Génère d'abord le visuel JML.");
+    return;
+  }
+
+  const accountsResponse = await fetch("/api/social/accounts");
+  const accountsData = await accountsResponse.json();
+  const connected = accountsData?.accounts?.facebook?.connected === true;
+
+  // When the Page is connected, publish the exact JML PNG + approved caption
+  // through the server. Otherwise keep the old manual share fallback.
+  if (connected) {
+    if (!confirm("Publier maintenant le visuel JML et le texte Facebook sur la Page connectée ?")) return;
+    const canvas = $("visual");
+    const imageData = canvas.toDataURL("image/png");
+    const button = $("shareFacebook");
+    button.disabled = true;
+    $("shareStatus").textContent = "⏳ Publication Facebook en cours…";
+    try {
+      const response = await fetch("/api/social/publish/facebook", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({ imageData, message:text })
+      });
+      const data = await response.json();
+      if (!response.ok || !data.ok) throw new Error(data.error || "Publication Facebook refusée.");
+      $("shareStatus").textContent = "🟢 Publication Facebook envoyée sur la Page connectée.";
+    } catch(error) {
+      $("shareStatus").textContent = "🔴 " + error.message;
+    } finally {
+      button.disabled = false;
+    }
+    return;
+  }
+
+  await copySocialText("facebook");
+  const url = currentListingUrl();
+  openSocial("https://www.facebook.com/sharer/sharer.php?u=" + encodeURIComponent(url));
 });
 
 $("shareInstagram").addEventListener("click", async () => {
