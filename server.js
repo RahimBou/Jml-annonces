@@ -19,7 +19,7 @@ app.use(express.static(path.join(__dirname, "public")));
 
 const SOCIAL_COOKIE = "jml_social";
 const SOCIAL_STATE_COOKIE = "jml_social_state";
-const SOCIAL_SECRET = process.env.SOCIAL_COOKIE_SECRET || process.env.JWT_SECRET || "CHANGE_ME_SOCIAL_SECRET";
+const SOCIAL_SECRET = process.env.SOCIAL_COOKIE_SECRET || process.env.JWT_SECRET || "";
 
 function appBaseUrl(req) {
   return (process.env.APP_BASE_URL || `${req.protocol}://${req.get("host")}`).replace(/\/$/, "");
@@ -107,6 +107,7 @@ app.get("/api/social/accounts", (req, res) => {
 
 app.get("/api/social/connect/:provider", (req, res) => {
   const provider = String(req.params.provider || "").toLowerCase();
+  if (!SOCIAL_SECRET) return res.status(503).send("Connexion sociale non sécurisée : configurez SOCIAL_COOKIE_SECRET dans Render.");
   const config = configuredSocialProviders();
   if (!["facebook","instagram","linkedin"].includes(provider)) {
     return res.status(400).send("Réseau social non pris en charge.");
@@ -148,6 +149,7 @@ app.get("/api/social/connect/:provider", (req, res) => {
 
 app.get("/api/social/callback/:provider", async (req, res) => {
   const provider = String(req.params.provider || "").toLowerCase();
+  if (!SOCIAL_SECRET) return res.status(503).send("Connexion sociale non sécurisée : configurez SOCIAL_COOKIE_SECRET dans Render.");
   const cookies = cookieMap(req);
   const stateData = decryptSocialPayload(cookies[SOCIAL_STATE_COOKIE]);
   setCookie(res, SOCIAL_STATE_COOKIE, "", 0);
@@ -1433,7 +1435,7 @@ app.get("/api/health", (_, res) => {
   res.json({
     ok: true,
     app: "jml-annonces",
-    version: "0.7.0",
+    version: "0.8.0",
     ai: {
       preferredProvider: geminiConfigured ? "gemini" : openaiConfigured ? "openai" : "none",
       geminiConfigured,
