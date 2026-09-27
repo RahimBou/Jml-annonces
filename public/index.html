@@ -118,17 +118,44 @@ $("load").addEventListener("click", async () => {
 
     const photos = $("photos");
     photos.innerHTML = "";
+
+    // Display only photos that really load through our verified JML proxy.
+    // This prevents empty/broken gallery cells from being shown to the user.
+    let loadedCount = 0;
+    let finishedCount = 0;
+    const totalCount = p.images.length;
+
+    const refreshPhotoStatus = () => {
+      if (finishedCount < totalCount) return;
+      $("photoWarning").textContent = loadedCount
+        ? `✓ ${loadedCount} photo(s) originale(s) réellement affichée(s). Aucune photo IA ne sera utilisée.`
+        : "⚠ Aucune photo originale récupérée : la future publication devra rester bloquée.";
+    };
+
     p.images.forEach((src) => {
       const img = document.createElement("img");
-      img.src = src;
       img.alt = "Photo originale de l'annonce JML";
       img.loading = "lazy";
+      img.src = "/api/image?url=" + encodeURIComponent(src);
+
+      img.addEventListener("load", () => {
+        loadedCount++;
+        finishedCount++;
+        refreshPhotoStatus();
+      }, { once: true });
+
+      img.addEventListener("error", () => {
+        finishedCount++;
+        img.remove();
+        refreshPhotoStatus();
+      }, { once: true });
+
       photos.appendChild(img);
     });
 
-    $("photoWarning").textContent = p.imageCount
-      ? `✓ ${p.imageCount} photo(s) originale(s) détectée(s). Aucune photo IA ne sera utilisée.`
-      : "⚠ Aucune photo originale récupérée : la future publication devra rester bloquée.";
+    if (!totalCount) {
+      $("photoWarning").textContent = "⚠ Aucune photo originale récupérée : la future publication devra rester bloquée.";
+    }
 
     $("status").textContent = "Annonce récupérée.";
     $("status").className = "status success";
