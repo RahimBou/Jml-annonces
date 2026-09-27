@@ -40,25 +40,97 @@ function firstText($, selectors) {
 
 function collectImages($) {
   const candidates = [];
+  const push = (value, score = 0) => {
+    const full = absoluteUrl(value);
+    if (!full) return;
+    const lower = full.toLowerCase();
+    if (
+      lower.includes("logo") ||
+      lower.includes("favicon") ||
+      lower.includes("icon") ||
+      lower.includes("dpe") ||
+      lower.includes("diagnostic") ||
+      lower.includes("map") ||
+      lower.includes("plan") ||
+      lower.includes("tiktok") ||
+      lower.includes("facebook") ||
+      lower.includes("instagram")
+    ) return;
+    candidates.push({ url: full, score });
+  };
 
+  // 1) Structured data is the preferred source when the agency page exposes
+  // the property's image gallery in JSON-LD.
+  $('script[type="application/ld+json"]').each((_, el) => {
+    try {
+      const raw = $(el).contents().text();
+      const data = JSON.parse(raw);
+      const walk = (node) => {
+        if (!node || typeof node !== "object") return;
+        if (Array.isArray(node)) return node.forEach(walk);
+        if (Array.isArray(node.image)) node.image.forEach((img) => {
+          if (typeof img === "string") push(img, 100);
+          else if (img && typeof img === "object") push(img.url || img.contentUrl, 100);
+        });
+        Object.values(node).forEach(walk);
+      };
+      walk(data);
+    } catch {}
+  });
+
+  // 2) Gallery links / lightbox attributes.
+  $('a').each((_, el) => {
+    const $el = $(el);
+    const attrs = [
+      $el.attr("href"),
+      $el.attr("data-src"),
+      $el.attr("data-image"),
+      $el.attr("data-original"),
+      $el.attr("data-fancybox"),
+      $el.attr("data-large-image")
+    ];
+    const classText = ($el.attr("class") || "").toLowerCase();
+    const score = /gallery|galerie|photo|fancybox|swiper|carousel/.test(classText) ? 80 : 50;
+    attrs.forEach((value) => push(value, score));
+  });
+
+  // 3) Image elements and responsive/lazy-loading attributes.
   $("img").each((_, el) => {
-    const src = $(el).attr("src") || $(el).attr("data-src") || $(el).attr("data-lazy-src");
-    const full = absoluteUrl(src);
-    if (full) candidates.push(full);
+    const $el = $(el);
+    const attrs = [
+      $el.attr("src"),
+      $el.attr("data-src"),
+      $el.attr("data-lazy-src"),
+      $el.attr("data-original"),
+      $el.attr("data-image"),
+      $el.attr("data-large"),
+      $el.attr("data-large-image")
+    ];
+    const classText = ($el.attr("class") || "").toLowerCase();
+    const score = /gallery|galerie|photo|fancybox|swiper|carousel/.test(classText) ? 70 : 30;
+    attrs.forEach((value) => push(value, score));
   });
 
-  $("a").each((_, el) => {
-    const href = $(el).attr("href");
-    const full = absoluteUrl(href);
-    if (full && /\\.(jpe?g|png|webp)(?:[?#].*)?$/i.test(full)) candidates.push(full);
+  // 4) srcset can contain the real full-size gallery URL.
+  $("[srcset], [data-srcset]").each((_, el) => {
+    const raw = $(el).attr("srcset") || $(el).attr("data-srcset") || "";
+    raw.split(",").forEach((part) => {
+      const value = part.trim().split(/\\s+/)[0];
+      if (value) push(value, 40);
+    });
   });
 
-  return [...new Set(candidates)].filter((url) => {
-    const lower = url.toLowerCase();
-    return !lower.includes("logo") && !lower.includes("icon") && !lower.includes("favicon");
-  });
+  const unique = new Map();
+  for (const item of candidates) {
+    const existing = unique.get(item.url);
+    if (!existing || item.score > existing.score) unique.set(item.url, item);
+  }
+
+  return [...unique.values()]
+    .sort((a, b) => b.score - a.score)
+    .map((item) => item.url)
+    .slice(0, 20);
 }
-
 function parsePrice(text) {
   if (!text) return null;
   const match = text.replace(/\\s/g, "").match(/([0-9][0-9 .]*)€/);
