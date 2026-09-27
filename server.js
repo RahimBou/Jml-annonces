@@ -27,7 +27,7 @@ function absoluteUrl(value) {
 }
 
 function cleanText(value) {
-  return String(value || "").replace(/\\s+/g, " ").trim();
+  return String(value || "").replace(/\s+/g, " ").trim();
 }
 
 function firstText($, selectors) {
@@ -187,9 +187,9 @@ function collectImages($) {
 
 function parsePrice(text) {
   if (!text) return null;
-  const normalized = String(text).replace(/\\u00a0/g, " ").replace(/\\s+/g, " ").trim();
-  const match = normalized.match(/([0-9][0-9 .]{2,})\\s*€/);
-  return match ? match[1].replace(/\\s+/g, " ").trim() + " €" : null;
+  const normalized = String(text).replace(/\\u00a0/g, " ").replace(/\s+/g, " ").trim();
+  const match = normalized.match(/([0-9][0-9 .]{2,})\s*€/);
+  return match ? match[1].replace(/\s+/g, " ").trim() + " €" : null;
 }
 
 function extractPrice($, bodyText) {
@@ -217,48 +217,93 @@ function extractPrice($, bodyText) {
     return value;
   }
 
-  const matches = [...bodyText.matchAll(/([0-9][0-9 .]{2,})\\s*€/g)]
-    .map((m) => m[1].replace(/\\s+/g, " ").trim() + " €");
+  const matches = [...bodyText.matchAll(/([0-9][0-9 .]{2,})\s*€/g)]
+    .map((m) => m[1].replace(/\s+/g, " ").trim() + " €");
   return matches.length ? matches[0] : null;
 }
 extractPrice.value = null;
 
 function parseListing(html, sourceUrl) {
   const $ = cheerio.load(html);
-  const title = firstText($, ["h1", "title"]);
   const bodyText = cleanText($("body").text());
 
+  // Prefer the listing's structured data when available. This avoids picking
+  // up values from recommendation blocks lower on the page.
+  const structured = {};
+  const collectStructured = (node) => {
+    if (!node || typeof node !== "object") return;
+    if (Array.isArray(node)) return node.forEach(collectStructured);
+
+    if (!structured.name && typeof node.name === "string" && /appartement|maison|pavillon|terrain|garage|immeuble|local/i.test(node.name)) {
+      structured.name = cleanText(node.name);
+    }
+    if (!structured.price && node.offers && typeof node.offers === "object") {
+      const p = node.offers.price ?? node.offers.lowPrice;
+      if (p != null) structured.price = String(p);
+    }
+    if (!structured.location && node.address && typeof node.address === "object") {
+      const locality = cleanText(node.address.addressLocality);
+      const postal = cleanText(node.address.postalCode);
+      if (locality) structured.location = postal ? `${locality} (${postal})` : locality;
+    }
+    if (!structured.surface && node.floorSize) {
+      const value = typeof node.floorSize === "object" ? node.floorSize.value : node.floorSize;
+      if (value) structured.surface = String(value).replace(",", ".") + " m²";
+    }
+    if (!structured.rooms && node.numberOfRooms != null) structured.rooms = Number(node.numberOfRooms);
+    if (!structured.bedrooms && node.numberOfBedrooms != null) structured.bedrooms = Number(node.numberOfBedrooms);
+
+    Object.values(node).forEach(collectStructured);
+  };
+
+  $('script[type="application/ld+json"]').each((_, el) => {
+    try {
+      collectStructured(JSON.parse($(el).contents().text()));
+    } catch {}
+  });
+
+  const title = structured.name || firstText($, ["h1", "title"]);
   const images = collectImages($);
 
   const property = {
     title,
-    price: extractPrice($, bodyText),
+    price: structured.price ? parsePrice(structured.price + " €") : extractPrice($, bodyText),
     sourceUrl,
-    location: null,
-    surface: null,
+    location: structured.location || null,
+    surface: structured.surface || null,
     terrain: null,
-    rooms: null,
-    bedrooms: null,
+    rooms: structured.rooms || null,
+    bedrooms: structured.bedrooms || null,
     description: firstText($, [".description", ".descriptif", "[class*='description']"]),
     images,
     imageCount: images.length,
     retrievedAt: new Date().toISOString()
   };
 
-  const locationMatch = bodyText.match(/([A-ZÉÈÀÙÂÊÎÔÛÇ][A-Za-zÀ-ÿ' -]+)\\s*\\((0[0-9]{4})\\)/);
-  if (locationMatch) property.location = `${locationMatch[1].trim()} (${locationMatch[2]})`;
+  // Correct DOM fallbacks, scoped to the listing text rather than blindly
+  // trusting the first matching value on the whole page.
+  if (!property.location) {
+    const locationMatch = bodyText.match(/([A-ZÉÈÀÙÂÊÎÔÛÇ][A-Za-zÀ-ÿ' -]+?)\s*\((0[0-9]{4})\)/);
+    if (locationMatch) property.location = `${locationMatch[1].trim()} (${locationMatch[2]})`;
+  }
 
-  const surfaceMatch = bodyText.match(/(?:Surface habitable|Surface|surface)\\s*:?\\s*([0-9]+(?:[.,][0-9]+)?)\\s*m²/i);
-  if (surfaceMatch) property.surface = surfaceMatch[1].replace(",", ".") + " m²";
+  if (!property.surface) {
+    const surfaceMatch = bodyText.match(/(?:Surface habitable|Surface)\s*:?\s*([0-9]+(?:[.,][0-9]+)?)\s*m²/i);
+    if (surfaceMatch) property.surface = surfaceMatch[1].replace(",", ".") + " m²";
+  }
 
-  const terrainMatch = bodyText.match(/(?:Terrain|terrain)\\s*:?\\s*([0-9]+(?:[.,][0-9]+)?)\\s*m²/i);
+  const terrainMatch = bodyText.match(/Terrain\s*:?\s*([0-9]+(?:[.,][0-9]+)?)\s*m²/i);
   if (terrainMatch) property.terrain = terrainMatch[1].replace(",", ".") + " m²";
 
-  const bedroomsMatch = bodyText.match(/([0-9]+)\\s*chambre(?:s)?/i);
-  if (bedroomsMatch) property.bedrooms = Number(bedroomsMatch[1]);
+  if (!property.bedrooms) {
+    const bedroomsMatch = bodyText.match(/([0-9]+)\s*chambre(?:s)?/i);
+    if (bedroomsMatch) property.bedrooms = Number(bedroomsMatch[1]);
+  }
 
-  const roomsMatch = bodyText.match(/([0-9]+)\\s*pièce(?:s)?/i);
-  if (roomsMatch) property.rooms = Number(roomsMatch[1]);
+  if (!property.rooms) {
+    const roomsMatch = bodyText.match(/([0-9]+)\s*pièce(?:s)?/i);
+    if (roomsMatch) property.rooms = Number(roomsMatch[1]);
+  }
 
   return property;
 }
