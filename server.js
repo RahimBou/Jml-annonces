@@ -323,13 +323,16 @@ function extractHighlights(bodyText) {
     ["Terrasse plein sud", /terrasse[^.]{0,80}plein\s+sud|plein\s+sud[^.]{0,80}terrasse/i],
     ["Cuisine équipée", /cuisine\s+(?:séparée\s+)?équipée/i],
     ["Salon lumineux", /séjour[^.]{0,80}(?:lumineux|lumineuse)|salon[^.]{0,80}(?:lumineux|lumineuse)/i],
+    ["Salle de bains", /salle\s+de\s+bains/i],
     ["Cave", /\bcave\b/i],
+    ["Parking", /parking/i],
     ["Garage possible", /possibilité\s+(?:de\s+)?garage|garage\s+(?:possible|possibilité)/i],
     ["Garage", /\bgarage(?:s)?\b/i],
     ["Vue dégagée", /vue\s+dégagée/i],
     ["Terrain arboré", /terrain\s+arboré/i],
     ["Piscinable", /piscinable/i],
     ["Plain-pied", /plain[- ]pied/i],
+    ["WC séparé", /wc\s+séparé/i],
     ["DPE en cours", /DPE\s+en\s+cours/i]
   ];
 
@@ -593,7 +596,7 @@ app.get("/api/image", async (req, res) => {
 });
 
 app.get("/api/health", (_, res) => {
-  res.json({ ok: true, app: "jml-annonces", version: "0.5.0" });
+  res.json({ ok: true, app: "jml-annonces", version: "0.6.0" });
 });
 
 app.listen(PORT, () => {
