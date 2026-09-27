@@ -1219,13 +1219,16 @@ app.post("/api/ai-layout", async (req, res) => {
         } catch {}
       }
 
-      if (!plan && !response?.ok) {
-        // Last-resort deterministic plan: preserve the original photos and
-        // verified factual highlights rather than blocking the visual.
+      if (!plan) {
+        // Last-resort deterministic plan: the visual must never be blocked by
+        // an AI outage. Preserve only verified listing facts and original photos.
+        const factualHighlights = Array.isArray(listing.highlights)
+          ? listing.highlights.filter(Boolean).slice(0, 6)
+          : [];
         plan = {
           title: listing.title || "Bien immobilier",
           subtitle: listing.location || "",
-          highlights: (listing.highlights || []).slice(0, 6),
+          highlights: factualHighlights,
           photoOrder: listing.images.map((_, i) => i)
         };
         provider = "deterministic";
