@@ -927,8 +927,20 @@ $("shareFacebook").addEventListener("click", async () => {
         body:JSON.stringify({ imageData, message:text })
       });
       const data = await response.json();
-      if (!response.ok || !data.ok) throw new Error(data.error || "Publication Facebook refusée.");
-      $("shareStatus").textContent = "🟢 Publication Facebook envoyée sur la Page connectée.";
+      if (!response.ok || !data.ok) {
+        const details = [
+          data.error,
+          data.metaCode != null ? "Code Meta " + data.metaCode : "",
+          data.metaSubcode != null ? "Sous-code " + data.metaSubcode : "",
+          data.requiredTask ? "Droit requis : " + data.requiredTask : "",
+          data.tasks?.length ? "Droits détectés : " + data.tasks.join(", ") : "",
+          data.uploadedPhotoId ? "Photo reçue par Meta : " + data.uploadedPhotoId : ""
+        ].filter(Boolean).join(" · ");
+        throw new Error(details || "Publication Facebook refusée.");
+      }
+      $("shareStatus").textContent = data.verified
+        ? "🟢 Publication Facebook confirmée sur la Page connectée."
+        : "🟢 Publication créée par Meta ; vérification directe indisponible.";
     } catch(error) {
       $("shareStatus").textContent = "🔴 " + error.message;
     } finally {
