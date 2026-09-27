@@ -614,7 +614,7 @@ app.post("/api/ai-layout", async (req, res) => {
         }
       },
       required: ["title", "subtitle", "highlights", "photoOrder"],
-      additionalProperties: false
+      propertyOrdering: ["title", "subtitle", "highlights", "photoOrder"]
     };
 
     // Gemini is the preferred provider because its current API has a Free Tier.
