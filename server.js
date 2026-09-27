@@ -361,12 +361,15 @@ app.post("/api/social/publish/facebook", async (req, res) => {
           item => String(item.id) === String(account.pageId)
         );
         const tasks = Array.isArray(managedPage?.tasks) ? managedPage.tasks : [];
-        if (tasks.length && !tasks.includes("PROFILE_PLUS_CREATE_CONTENT")) {
+        const canCreateContent =
+          tasks.includes("PROFILE_PLUS_CREATE_CONTENT") ||
+          tasks.includes("CREATE_CONTENT");
+        if (tasks.length && !canCreateContent) {
           return res.status(403).json({
             ok:false,
             requestId,
             error:"Meta n'accorde pas la tâche de création de contenu à cette connexion.",
-            requiredTask:"PROFILE_PLUS_CREATE_CONTENT",
+            requiredTask:"PROFILE_PLUS_CREATE_CONTENT ou CREATE_CONTENT",
             tasks,
             pageId:account.pageId
           });
@@ -434,6 +437,64 @@ app.post("/api/social/publish/facebook", async (req, res) => {
     });
   }
 });
+app.get("/api/social/facebook-debug", async (req, res) => {
+  const requestId = crypto.randomBytes(6).toString("hex");
+  try {
+    const stored = readSocialAccounts(req);
+    const account = stored.facebook;
+    if (!account?.accessToken || !account?.pageId) {
+      return res.status(401).json({ok:false, requestId, connected:false, error:"Aucune Page Facebook complète n'est enregistrée."});
+    }
+    const graphVersion = process.env.META_GRAPH_VERSION || "v23.0";
+    const base = "https://graph.facebook.com/" + graphVersion;
+    const pageResponse = await fetch(
+      base + "/" + encodeURIComponent(account.pageId) +
+      "?fields=id,name&access_token=" + encodeURIComponent(account.accessToken)
+    );
+    const page = await pageResponse.json();
+
+    let tasks = [];
+    let managedPage = null;
+    let permissions = [];
+    if (account.userAccessToken) {
+      const accountsResponse = await fetch(
+        base + "/me/accounts?fields=id,name,tasks&access_token=" +
+        encodeURIComponent(account.userAccessToken)
+      );
+      const accountsPayload = await accountsResponse.json();
+      if (accountsResponse.ok && Array.isArray(accountsPayload.data)) {
+        managedPage = accountsPayload.data.find(item => String(item.id) === String(account.pageId)) || null;
+        tasks = Array.isArray(managedPage?.tasks) ? managedPage.tasks : [];
+      }
+      const permissionsResponse = await fetch(
+        base + "/me/permissions?access_token=" + encodeURIComponent(account.userAccessToken)
+      );
+      const permissionsPayload = await permissionsResponse.json();
+      if (permissionsResponse.ok && Array.isArray(permissionsPayload.data)) {
+        permissions = permissionsPayload.data
+          .filter(item => item.status === "granted")
+          .map(item => item.permission);
+      }
+    }
+
+    res.json({
+      ok:true,
+      requestId,
+      graphVersion,
+      connected:true,
+      page:{id:page?.id || account.pageId,name:page?.name || account.name || null,tokenValid:pageResponse.ok},
+      tasks,
+      canCreateContent: tasks.length
+        ? (tasks.includes("PROFILE_PLUS_CREATE_CONTENT") || tasks.includes("CREATE_CONTENT"))
+        : null,
+      permissions,
+      metaPageError: pageResponse.ok ? null : (page?.error?.message || "Jeton Page refusé par Meta.")
+    });
+  } catch (error) {
+    res.status(500).json({ok:false,requestId,error:error.message || "Diagnostic Facebook impossible."});
+  }
+});
+
 app.post("/api/social/disconnect/:provider", (req, res) => {
   const provider = String(req.params.provider || "").toLowerCase();
   const stored = readSocialAccounts(req);
