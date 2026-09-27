@@ -926,7 +926,14 @@ $("shareFacebook").addEventListener("click", async () => {
         headers:{"Content-Type":"application/json"},
         body:JSON.stringify({ imageData, message:text })
       });
-      const data = await response.json();
+
+      // Never hide a server/Meta error behind a JSON parsing exception.
+      const rawResponse = await response.text();
+      let data = {};
+      try { data = rawResponse ? JSON.parse(rawResponse) : {}; } catch {
+        data = { error: rawResponse || ("Réponse serveur HTTP " + response.status) };
+      }
+
       if (!response.ok || !data.ok) {
         const details = [
           data.error,
@@ -934,13 +941,15 @@ $("shareFacebook").addEventListener("click", async () => {
           data.metaSubcode != null ? "Sous-code " + data.metaSubcode : "",
           data.requiredTask ? "Droit requis : " + data.requiredTask : "",
           data.tasks?.length ? "Droits détectés : " + data.tasks.join(", ") : "",
-          data.uploadedPhotoId ? "Photo reçue par Meta : " + data.uploadedPhotoId : ""
+          data.requestId ? "Réf. " + data.requestId : ""
         ].filter(Boolean).join(" · ");
         throw new Error(details || "Publication Facebook refusée.");
       }
-      $("shareStatus").textContent = data.verified
-        ? "🟢 Publication Facebook confirmée sur la Page connectée."
-        : "🟢 Publication créée par Meta ; vérification directe indisponible.";
+
+      $("shareStatus").textContent = "🟢 Publication Facebook créée sur la Page connectée.";
+      if (data.requestId) {
+        $("shareStatus").textContent += " Réf. " + data.requestId;
+      }
     } catch(error) {
       $("shareStatus").textContent = "🔴 " + error.message;
     } finally {
