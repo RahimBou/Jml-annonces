@@ -932,14 +932,27 @@ function buildLocalSocialCopies(listing) {
     terrain: cleanText(listing.terrain || ""),
     rooms: listing.rooms != null ? String(listing.rooms) : "",
     bedrooms: listing.bedrooms != null ? String(listing.bedrooms) : "",
-    description: cleanText(listing.description || ""),
     highlights: Array.isArray(listing.aiPlan?.highlights)
-      ? listing.aiPlan.highlights.filter(Boolean).slice(0, 6)
-      : (Array.isArray(listing.highlights) ? listing.highlights.filter(Boolean).slice(0, 6) : [])
+      ? listing.aiPlan.highlights.filter(Boolean).slice(0, 8)
+      : (Array.isArray(listing.highlights) ? listing.highlights.filter(Boolean).slice(0, 8) : [])
   };
 
   const location = facts.location ? " à " + facts.location : "";
   const reference = facts.reference ? "Réf. " + facts.reference : "";
+  const priceLine = facts.price ? "💰 " + facts.price : "";
+
+  // Keep the social copy compact: facts already shown in the specification line
+  // should not be repeated in the highlights.
+  const duplicatePatterns = [
+    facts.surface && new RegExp(facts.surface.replace(/[.*+?^$()|[\]\\]/g, "\\$&"), "i"),
+    facts.terrain && new RegExp(facts.terrain.replace(/[.*+?^$()|[\]\\]/g, "\\$&"), "i"),
+    facts.bedrooms && new RegExp("\\b" + facts.bedrooms + "\\s+chambre", "i"),
+    facts.rooms && new RegExp("\\b" + facts.rooms + "\\s+pièce", "i")
+  ].filter(Boolean);
+
+  const highlights = facts.highlights
+    .filter(item => !duplicatePatterns.some(pattern => pattern.test(item)))
+    .slice(0, 6);
 
   const specs = [
     facts.surface ? "📐 " + facts.surface : "",
@@ -948,27 +961,24 @@ function buildLocalSocialCopies(listing) {
     facts.rooms ? "🚪 " + facts.rooms + " pièces" : ""
   ].filter(Boolean);
 
-  const highlights = facts.highlights.map((x) => "• " + x);
-  const priceLine = facts.price ? "💶 " + facts.price : "";
-
   const facebook = [
-    "🏡 " + (facts.type || "Nouveau bien") + location,
+    "🏡 " + (facts.type || "Bien immobilier") + location,
     "",
-    priceLine + (reference ? "  ·  " + reference : ""),
-    specs.length ? specs.join("  ·  ") : "",
+    priceLine + (reference ? " · " + reference : ""),
+    specs.length ? specs.join(" · ") : "",
     "",
-    highlights.length ? "✨ Les points forts\n" + highlights.join("\n") : "",
+    highlights.length ? "✨ Les atouts du bien :" : "",
+    ...highlights.map(item => "• " + item),
     "",
-    "Vous souhaitez découvrir ce bien ? Contactez-moi pour organiser une visite."
-  ].filter((line, i, arr) => line !== "" || (i > 0 && i < arr.length - 1))
-   .join("\n");
+    "📩 Vous souhaitez découvrir ce bien ? Contactez-moi pour organiser une visite."
+  ].filter(Boolean).join("\n");
 
   const instagram = [
-    "🏡 " + (facts.type || "Nouveau bien") + location,
-    priceLine + (reference ? "  ·  " + reference : ""),
-    specs.length ? specs.join("  ·  ") : "",
+    "🏡 " + (facts.type || "Bien immobilier") + location,
+    priceLine + (reference ? " · " + reference : ""),
+    specs.length ? specs.join(" · ") : "",
     "",
-    highlights.length ? "✨ " + facts.highlights.join(" • ") : "",
+    highlights.length ? "✨ " + highlights.join(" • ") : "",
     "",
     "📩 Infos & visites sur demande.",
     "",
@@ -976,13 +986,12 @@ function buildLocalSocialCopies(listing) {
   ].filter(Boolean).join("\n");
 
   const linkedin = [
-    "🏠 Nouvelle opportunité immobilière" + location,
+    "🏠 " + (facts.type || "Bien immobilier") + location,
     "",
-    (facts.type || "Bien immobilier") + ".",
-    priceLine + (reference ? "  ·  " + reference : ""),
-    specs.length ? specs.join("  ·  ") : "",
+    priceLine + (reference ? " · " + reference : ""),
+    specs.length ? specs.join(" · ") : "",
     "",
-    highlights.length ? "Points clés :\n" + highlights.join("\n") : "",
+    highlights.length ? "Points clés :\n" + highlights.map(item => "• " + item).join("\n") : "",
     "",
     "Les informations présentées correspondent aux données vérifiées de l'annonce source."
   ].filter(Boolean).join("\n");
