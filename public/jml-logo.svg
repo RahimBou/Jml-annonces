@@ -1,14 +1,20 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="1000" height="300" viewBox="0 0 1000 300">
-  <title>JML Immobilier</title>
-  <g fill="#b07a2a" stroke="#b07a2a" stroke-linecap="round" stroke-linejoin="round">
-    <text x="18" y="190" font-family="Georgia, 'Times New Roman', serif" font-size="92" font-weight="700" letter-spacing="-2">JML Immobilier</text>
-    <path d="M690 112 L835 22 L985 112" fill="none" stroke-width="10"/>
-    <path d="M835 22 L835 112" fill="none" stroke-width="10"/>
-    <path d="M930 100 L930 218 L885 218 L885 152" fill="none" stroke-width="10"/>
-    <path d="M690 112 C775 105 850 120 885 152 C902 168 916 188 930 218" fill="none" stroke-width="10"/>
-    <rect x="800" y="112" width="25" height="25" rx="1"/>
-    <rect x="835" y="112" width="25" height="25" rx="1"/>
-    <rect x="817" y="147" width="25" height="25" rx="1"/>
+  <g fill="none" stroke="#c89a3f" stroke-width="10" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M635 145 L780 28 L925 145"/>
+    <path d="M835 78 L835 145 L900 145 L900 252 L852 252"/>
+    <path d="M852 252 L852 170"/>
+    <path d="M635 145 Q700 145 748 174 Q805 208 852 252"/>
   </g>
+  <g fill="#c89a3f">
+    <rect x="758" y="88" width="27" height="27" rx="1"/>
+    <rect x="796" y="88" width="27" height="27" rx="1"/>
+    <rect x="758" y="126" width="27" height="27" rx="1"/>
+    <rect x="796" y="126" width="27" height="27" rx="1"/>
+  </g>
+  <text x="25" y="196"
+        font-family="Georgia, 'Times New Roman', serif"
+        font-size="104"
+        font-weight="700"
+        fill="#c89a3f">JML Immobilier</text>
 </svg>
