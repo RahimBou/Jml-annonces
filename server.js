@@ -1075,14 +1075,19 @@ app.post("/api/ai-layout", async (req, res) => {
       // Gemini can temporarily return 429/503 when a model is under heavy load.
       // Retry with a short delay, then fall back to the previous stable Flash model.
       // The fallback still uses Gemini and the same verified original photos.
+      // High-demand periods can affect one model while another remains available.
+      // Keep several official Flash fallbacks and use exponential backoff for 429/503.
       const geminiModels = [...new Set([
         model,
         "gemini-3.7-flash",
-        "gemini-3.6-flash"
+        "gemini-3.6-flash",
+        "gemini-3.5-flash",
+        "gemini-3.5-flash-lite",
+        "gemini-3-flash-preview"
       ])];
 
       for (const candidateModel of geminiModels) {
-        for (let attempt = 0; attempt < 2; attempt++) {
+        for (let attempt = 0; attempt < 3; attempt++) {
           response = await fetch(
             "https://generativelanguage.googleapis.com/v1beta/models/" +
               encodeURIComponent(candidateModel) +
@@ -1123,8 +1128,8 @@ app.post("/api/ai-layout", async (req, res) => {
           }
 
           const retryable = response.status === 429 || response.status === 503;
-          if (!retryable || attempt === 1) break;
-          await new Promise(resolve => setTimeout(resolve, 900));
+          if (!retryable || attempt === 2) break;
+          await new Promise(resolve => setTimeout(resolve, 1200 * Math.pow(2, attempt)));
         }
 
         if (response?.ok) break;
