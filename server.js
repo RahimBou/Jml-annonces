@@ -564,6 +564,110 @@ app.post("/api/scrape", async (req, res) => {
   }
 });
 
+
+app.post("/api/ai-layout", async (req, res) => {
+  try {
+    if (!process.env.OPENAI_API_KEY) {
+      return res.status(503).json({ ok: false, error: "OPENAI_API_KEY n'est pas configurée sur le serveur." });
+    }
+
+    const listing = req.body?.listing;
+    if (!listing || !Array.isArray(listing.images) || listing.images.length === 0) {
+      return res.status(400).json({ ok: false, error: "Annonce ou photos originales manquantes." });
+    }
+
+    const facts = {
+      type: listing.title || null,
+      reference: listing.reference || null,
+      price: listing.price || null,
+      location: listing.location || null,
+      surface: listing.surface || null,
+      terrain: listing.terrain || null,
+      rooms: listing.rooms || null,
+      bedrooms: listing.bedrooms || null,
+      description: listing.description || null,
+      existingHighlights: listing.highlights || []
+    };
+
+    const prompt = "Tu es l'assistant éditorial de JML Immobilier. Prépare le contenu d'un visuel immobilier premium à partir UNIQUEMENT des faits fournis. Ne jamais inventer une caractéristique. Les photos sont les photos originales vérifiées et ne doivent jamais être remplacées. Choisis exactement 6 points forts courts, factuels et lisibles. Évite les doublons. Réponds uniquement avec un JSON valide ayant les clés title, subtitle, highlights et photoOrder. highlights doit contenir exactement 6 chaînes. photoOrder doit contenir uniquement des indices 0-based des photos originales.";
+
+    const response = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + process.env.OPENAI_API_KEY
+      },
+      body: JSON.stringify({
+        model: process.env.OPENAI_MODEL || "gpt-5.6-luna",
+        input: [
+          {
+            role: "developer",
+            content: "Tu produis des données JSON strictes pour une application immobilière. Aucun fait ne doit être inventé."
+          },
+          {
+            role: "user",
+            content: [
+              { type: "input_text", text: prompt + "\n\nDONNÉES DE L'ANNONCE:\n" + JSON.stringify(facts) }
+            ]
+          }
+        ],
+        text: {
+          format: {
+            type: "json_schema",
+            name: "jml_visual_plan",
+            strict: true,
+            schema: {
+              type: "object",
+              additionalProperties: false,
+              properties: {
+                title: { type: "string" },
+                subtitle: { type: "string" },
+                highlights: { type: "array", minItems: 6, maxItems: 6, items: { type: "string" } },
+                photoOrder: { type: "array", items: { type: "integer", minimum: 0 } }
+              },
+              required: ["title", "subtitle", "highlights", "photoOrder"]
+            }
+          }
+        },
+        max_output_tokens: 700
+      })
+    });
+
+    const payload = await response.json();
+    if (!response.ok) {
+      return res.status(502).json({ ok: false, error: payload?.error?.message || "Erreur lors de l'appel à ChatGPT." });
+    }
+
+    let raw = payload.output_text || "";
+    let plan;
+    try {
+      plan = JSON.parse(raw);
+    } catch {
+      const jsonMatch = raw.match(/\{[\\s\\S]*\}/);
+      if (!jsonMatch) throw new Error("Réponse ChatGPT non exploitable.");
+      plan = JSON.parse(jsonMatch[0]);
+    }
+
+    const indices = Array.isArray(plan.photoOrder) ? plan.photoOrder : [];
+    const safeIndices = [...new Set(indices.filter((n) => Number.isInteger(n) && n >= 0 && n < listing.images.length))];
+    plan.photoOrder = (safeIndices.length ? safeIndices : listing.images.map((_, i) => i))
+      .concat(listing.images.map((_, i) => i).filter((i) => !safeIndices.includes(i)));
+
+    plan.highlights = (Array.isArray(plan.highlights) ? plan.highlights : [])
+      .map((x) => cleanText(x)).filter(Boolean).slice(0, 6);
+
+    for (const fallback of (listing.highlights || [])) {
+      if (plan.highlights.length >= 6) break;
+      if (!plan.highlights.includes(fallback)) plan.highlights.push(fallback);
+    }
+    while (plan.highlights.length < 6) plan.highlights.push("Voir l'annonce");
+
+    res.json({ ok: true, model: process.env.OPENAI_MODEL || "gpt-5.6-luna", plan, originalPhotosOnly: true });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message || "Erreur ChatGPT." });
+  }
+});
+
 app.get("/api/image", async (req, res) => {
   try {
     const raw = String(req.query.url || "");
