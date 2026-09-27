@@ -25,6 +25,24 @@ const SOCIAL_COOKIE = "jml_social";
 const SOCIAL_STATE_COOKIE = "jml_social_state";
 const SOCIAL_SECRET = process.env.SOCIAL_COOKIE_SECRET || process.env.JWT_SECRET || "";
 
+const META_DEFAULT_APP_ID = "1747047203221133";
+const META_DEFAULT_SCOPES = [
+  "pages_show_list",
+  "pages_read_engagement",
+  "pages_manage_posts",
+  "instagram_basic",
+  "instagram_content_publish",
+  "business_management"
+].join(",");
+
+function metaAppId() {
+  // The previous JML Meta app is retired. Keep the new app as the safe default
+  // while still allowing Render to override it explicitly later.
+  const configured = String(metaAppId() || "").trim();
+  if (!configured || configured === "1620813812977055") return META_DEFAULT_APP_ID;
+  return configured;
+}
+
 function appBaseUrl(req) {
   // Render terminates TLS at the proxy, so req.protocol can be "http"
   // even though the public application URL is HTTPS. Never send Meta an
@@ -91,8 +109,8 @@ function readSocialAccounts(req) {
 
 function configuredSocialProviders() {
   return {
-    facebook: Boolean(process.env.META_APP_ID && process.env.META_APP_SECRET),
-    instagram: Boolean(process.env.META_APP_ID && process.env.META_APP_SECRET),
+    facebook: Boolean(metaAppId() && process.env.META_APP_SECRET),
+    instagram: Boolean(metaAppId() && process.env.META_APP_SECRET),
     linkedin: Boolean(process.env.LINKEDIN_CLIENT_ID && process.env.LINKEDIN_CLIENT_SECRET)
   };
 }
@@ -154,12 +172,11 @@ app.get("/api/social/connect/:provider", (req, res) => {
   }
 
   const params = new URLSearchParams({
-    client_id: process.env.META_APP_ID,
+    client_id: metaAppId(),
     redirect_uri: socialRedirectUri(req, provider),
     state,
     response_type: "code",
-    scope: process.env.META_SCOPES ||
-      "pages_show_list,pages_read_engagement,pages_manage_posts,instagram_basic,instagram_content_publish"
+    scope: process.env.META_SCOPES || META_DEFAULT_SCOPES
   });
   return res.redirect("https://www.facebook.com/dialog/oauth?" + params.toString());
 });
@@ -220,7 +237,7 @@ app.get("/api/social/callback/:provider", async (req, res) => {
       const tokenUrl = "https://graph.facebook.com/" +
         (process.env.META_GRAPH_VERSION || "v23.0") + "/oauth/access_token";
       const tokenResponse = await fetch(tokenUrl + "?" + new URLSearchParams({
-        client_id: process.env.META_APP_ID,
+        client_id: metaAppId(),
         client_secret: process.env.META_APP_SECRET,
         redirect_uri: socialRedirectUri(req, provider),
         code
@@ -243,7 +260,11 @@ app.get("/api/social/callback/:provider", async (req, res) => {
       }
 
       const pages = Array.isArray(pagesPayload.data) ? pagesPayload.data : [];
-      const page = pages[0] || null;
+      const preferredPageId = String(process.env.META_PAGE_ID || "156425008274121").trim();
+      const page =
+        pages.find(item => String(item.id) === preferredPageId) ||
+        pages[0] ||
+        null;
       if (page) {
         stored.facebook = {
           accessToken: page.access_token || token.access_token,
@@ -1448,11 +1469,18 @@ app.get("/api/health", (_, res) => {
   const geminiConfigured = Boolean(process.env.GEMINI_API_KEY);
   const openaiConfigured = Boolean(process.env.OPENAI_API_KEY);
   const configuredModel = process.env.GEMINI_MODEL || "gemini-3.8-flash";
+  const metaAppConfigured = Boolean(process.env.META_APP_SECRET);
+  const metaAppIdValue = metaAppId();
 
   res.json({
     ok: true,
     app: "jml-annonces",
-    version: "0.8.0",
+    version: "0.9.0",
+    meta: {
+      appId: metaAppIdValue,
+      configured: metaAppConfigured,
+      pageId: String(process.env.META_PAGE_ID || "156425008274121")
+    },
     ai: {
       preferredProvider: geminiConfigured ? "gemini" : openaiConfigured ? "openai" : "none",
       geminiConfigured,
