@@ -183,23 +183,10 @@ async function renderJmlTemplate() {
   ctx.fillStyle = brand;
   ctx.fillRect(0,0,475,175);
 
-  // Actual JML logo when available; otherwise clean text fallback.
-  if (p.logoUrl) {
-    const logo = await loadCanvasImage(p.logoUrl);
-    if (logo) {
-      const scale = Math.min(390/logo.naturalWidth,145/logo.naturalHeight);
-      ctx.drawImage(logo,35,14,logo.naturalWidth*scale,logo.naturalHeight*scale);
-    }
-  } else {
-    ctx.fillStyle = GREEN;
-    ctx.font = "bold 48px Georgia";
-    ctx.fillText("JML",35,66);
-    ctx.fillStyle = GOLD;
-    ctx.font = "bold 46px Georgia";
-    ctx.fillText(" IMMOBILIER",115,66);
-    ctx.fillStyle = "#555";
-    ctx.font = "15px Arial";
-    ctx.fillText("VOTRE PROJET, NOTRE ENGAGEMENT",38,102);
+  // Fixed JML master logo: same asset on every generated visual.
+  const logo = await loadCanvasImage("/jml-logo.svg");
+  if (logo) {
+    ctx.drawImage(logo,28,12,430,115);
   }
 
   // TOP RIGHT GREEN/GOLD folded badge.
@@ -221,8 +208,10 @@ async function renderJmlTemplate() {
 
   ctx.fillStyle = WHITE;
   ctx.font = "bold 19px Arial";
-  fitCanvasText(ctx,String(p.location || "").toUpperCase(),995,168,370,"bold 19px Arial");
-  const postal = String(p.location || "").match(/\((\d{5})\)/);
+  const locationText = String(p.location || "");
+  const postal = locationText.match(/\((\d{5})\)/);
+  const city = locationText.replace(/\s*\(\d{5}\)/,"").trim();
+  fitCanvasText(ctx,city.toUpperCase(),995,168,370,"bold 19px Arial");
   ctx.font = "17px Arial";
   ctx.fillText(postal ? postal[1] : "",995,198);
 
@@ -291,7 +280,7 @@ async function renderJmlTemplate() {
   ctx.fillRect(0,HIGHLIGHTS_Y,W,HIGHLIGHTS_H);
 
   const highlights=(p.highlights && p.highlights.length ? p.highlights : ["Informations de l'annonce"]).slice(0,6);
-  const columns=Math.max(1,highlights.length);
+  const columns=6;
   const colW=W/columns;
 
   highlights.forEach((item,i)=>{
@@ -307,7 +296,7 @@ async function renderJmlTemplate() {
     ctx.fillText("◆",x+34,HIGHLIGHTS_Y+53);
     ctx.textAlign="left";
     ctx.fillStyle=WHITE;
-    fitCanvasText(ctx,item,x+58,HIGHLIGHTS_Y+49,colW-70,"bold 15px Georgia");
+    fitCanvasText(ctx,item,x+58,HIGHLIGHTS_Y+43,colW-70,"bold 14px Georgia");
   });
 
   // CONTACT FOOTER — fixed bottom area.
@@ -338,20 +327,10 @@ async function renderJmlTemplate() {
   ctx.fillText("Agent commercial indépendant",552,FOOTER_Y+58);
   ctx.fillText("Réseau JML Immobilier",552,FOOTER_Y+80);
 
-  // Bottom right logo / brand.
-  if (p.logoUrl) {
-    const logo = await loadCanvasImage(p.logoUrl);
-    if (logo) {
-      const scale=Math.min(220/logo.naturalWidth,70/logo.naturalHeight);
-      ctx.drawImage(logo,945,FOOTER_Y+16,logo.naturalWidth*scale,logo.naturalHeight*scale);
-    }
-  } else {
-    ctx.fillStyle=GREEN;
-    ctx.font="bold 25px Georgia";
-    ctx.fillText("JML IMMOBILIER",945,FOOTER_Y+45);
-    ctx.fillStyle="#777";
-    ctx.font="11px Arial";
-    ctx.fillText("VOTRE PROJET, NOTRE ENGAGEMENT",945,FOOTER_Y+66);
+  // Bottom right master logo.
+  const bottomLogo = await loadCanvasImage("/jml-logo.svg");
+  if (bottomLogo) {
+    ctx.drawImage(bottomLogo,935,FOOTER_Y+12,235,63);
   }
 
   $("visualSection").style.display="block";
