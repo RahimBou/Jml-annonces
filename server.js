@@ -1280,7 +1280,12 @@ app.post("/api/ai-layout", async (req, res) => {
       "Ne jamais inventer une caractéristique du bien.",
       "Les photos fournies sont les photos originales vérifiées : elles doivent rester exactement les mêmes dans le visuel final.",
       "Ne génère, ne transforme et ne remplace aucune photo.",
-      "Choisis la meilleure photo pour la photo principale et ordonne les autres photos pour la mosaïque.",
+      "Choisis la meilleure photo pour la photo principale et place son index en PREMIER dans photoOrder.",
+      "Pour la photo principale, privilégie en priorité une photo extérieure de façade montrant clairement le bien dans son ensemble.",
+      "Évite comme photo principale les salles de bains, cuisines, chambres, couloirs, pièces très serrées, photos sombres, floues ou cadrages peu représentatifs.",
+      "Si aucune façade extérieure n'est disponible, privilégie ensuite le séjour ou la pièce de vie la plus lumineuse et représentative.",
+      "La première image doit donner immédiatement envie de découvrir le bien dans un fil Facebook/Instagram.",
+      "Ordre de préférence pour les images suivantes : extérieur/terrasse, séjour, cuisine, salle de bains, chambres et autres pièces.",
       "Choisis exactement 6 points forts courts, factuels et lisibles.",
       "Évite les doublons.",
       "Réponds uniquement en JSON."
