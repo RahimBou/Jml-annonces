@@ -39,13 +39,34 @@ function firstText($, selectors) {
 }
 
 function collectImages($) {
-  const candidates = [];
-  const push = (value, score = 0, order = 0) => {
-    const full = absoluteUrl(value);
-    if (!full) return;
-    const lower = full.toLowerCase();
+  /*
+   * Structured gallery contract:
+   * 1. Identify a gallery container, never arbitrary images on the page.
+   * 2. Extract only image candidates that belong to that container.
+   * 3. Keep DOM order and deduplicate by canonical URL.
+   * 4. JSON-LD is an explicit fallback only when no gallery exists.
+   * 5. Expose diagnostics so publication can be refused when extraction is
+   *    incomplete or ambiguous.
+   */
+  const diagnostics = {
+    strategy: "structured-gallery",
+    gallerySelector: null,
+    galleryCandidates: 0,
+    selectedGalleryScore: 0,
+    rawPhotoCount: 0,
+    uniquePhotoCount: 0,
+    source: null,
+    confidence: "low",
+    suspicious: false,
+    reasons: []
+  };
 
-    // Never take branding, diagnostics, maps or social-media assets.
+  const normalizeImageUrl = (value) => {
+    if (!value) return null;
+    const full = absoluteUrl(String(value).trim());
+    if (!full) return null;
+
+    const lower = full.toLowerCase();
     if (
       lower.includes("logo") ||
       lower.includes("favicon") ||
@@ -57,132 +78,204 @@ function collectImages($) {
       lower.includes("tiktok") ||
       lower.includes("facebook") ||
       lower.includes("instagram")
-    ) return;
+    ) return null;
 
-    candidates.push({ url: full, score, order });
+    return full;
   };
 
-  let order = 0;
+  const imageAttrs = ($el) => [
+    $el.attr("href"),
+    $el.attr("data-src"),
+    $el.attr("data-image"),
+    $el.attr("data-original"),
+    $el.attr("data-fancybox"),
+    $el.attr("data-large-image"),
+    $el.attr("data-lazy-src"),
+    $el.attr("data-large"),
+    $el.attr("src")
+  ].filter(Boolean);
 
-  // JSON-LD is useful, but it can contain images from related/recommended
-  // properties. Keep it as a fallback rather than mixing it with the main
-  // gallery when a real gallery is found in the page DOM.
-  const jsonLdCandidates = [];
-  $('script[type="application/ld+json"]').each((_, el) => {
-    try {
-      const raw = $(el).contents().text();
-      const data = JSON.parse(raw);
-      const walk = (node) => {
-        if (!node || typeof node !== "object") return;
-        if (Array.isArray(node)) return node.forEach(walk);
-        if (Array.isArray(node.image)) {
-          node.image.forEach((img) => {
-            const value = typeof img === "string" ? img : img?.url || img?.contentUrl;
-            if (value) jsonLdCandidates.push(value);
-          });
-        }
-        Object.values(node).forEach(walk);
-      };
-      walk(data);
-    } catch {}
-  });
+  const isRelatedContainer = ($el) => {
+    const text = [
+      $el.attr("id"),
+      $el.attr("class"),
+      $el.attr("aria-label"),
+      $el.attr("data-title")
+    ].filter(Boolean).join(" ").toLowerCase();
 
-  // Look for the page's actual gallery container first. This is the critical
-  // distinction: JML pages can contain a second carousel for other properties.
+    return /(related|similar|similaire|suggest|recommand|autres[-_ ]?biens|biens[-_ ]?similaires|annonces[-_ ]?similaires)/i.test(text);
+  };
+
+  const scoreGallery = ($el, selector, index) => {
+    const classText = [
+      $el.attr("id"),
+      $el.attr("class"),
+      $el.attr("role"),
+      $el.attr("data-gallery"),
+      $el.attr("data-gallery-id")
+    ].filter(Boolean).join(" ").toLowerCase();
+
+    const childCount = $el.find("a, img").length;
+    if (childCount < 2 || isRelatedContainer($el)) return null;
+
+    let score = 0;
+
+    if (/gallery|galerie/.test(classText)) score += 100;
+    if (/fancybox/.test(classText)) score += 90;
+    if (/swiper/.test(classText)) score += 80;
+    if (/carousel|slider/.test(classText)) score += 70;
+    if ($el.attr("data-gallery") || $el.attr("data-gallery-id")) score += 120;
+
+    const fullSizeLinks = $el.find("a[data-original], a[data-large-image], a[data-large], a[data-src]").length;
+    score += Math.min(fullSizeLinks * 8, 40);
+
+    if (childCount >= 3 && childCount <= 30) score += 20;
+    if (childCount > 50) score -= 30;
+
+    score += Math.max(0, 20 - Math.min(index, 20));
+
+    return { score, childCount, selector, domIndex: index };
+  };
+
   const gallerySelectors = [
-    '[class*="gallery"]',
-    '[class*="galerie"]',
-    '[id*="gallery"]',
-    '[id*="galerie"]',
-    '[class*="fancybox"]',
-    '[class*="swiper"]',
-    '[class*="carousel"]'
+    "[data-gallery]",
+    "[data-gallery-id]",
+    "[class*='gallery']",
+    "[class*='galerie']",
+    "[id*='gallery']",
+    "[id*='galerie']",
+    "[class*='fancybox']",
+    "[class*='swiper']",
+    "[class*='carousel']",
+    "[class*='slider']"
   ];
 
   const galleryNodes = [];
+  let domIndex = 0;
+
   for (const selector of gallerySelectors) {
     $(selector).each((_, el) => {
       const $el = $(el);
-      const count = $el.find('a, img').length;
-      if (count >= 2) galleryNodes.push({ el, count, selector });
+      const scored = scoreGallery($el, selector, domIndex++);
+      if (scored) galleryNodes.push({ el, ...scored });
     });
   }
 
-  // Prefer the largest gallery-like container near the top of the property
-  // page. Related-property carousels are normally farther down the DOM.
-  galleryNodes.sort((a, b) => {
-    const posA = $(a.el).index();
-    const posB = $(b.el).index();
-    return (b.count - a.count) * 1000 + (posA - posB);
+  const uniqueNodes = new Map();
+  for (const item of galleryNodes) {
+    const key = item.el;
+    const existing = uniqueNodes.get(key);
+    if (!existing || item.score > existing.score) uniqueNodes.set(key, item);
+  }
+
+  const ranked = [...uniqueNodes.values()].sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    return a.domIndex - b.domIndex;
   });
 
-  let galleryUrls = [];
-  if (galleryNodes.length) {
-    const chosen = galleryNodes[0].el;
-    const $gallery = $(chosen);
+  diagnostics.galleryCandidates = ranked.length;
 
-    $gallery.find('a, img').each((_, el) => {
+  const extractFromGallery = (gallery) => {
+    const urls = [];
+    const seen = new Set();
+    const $gallery = $(gallery.el);
+
+    $gallery.find("a, img").each((position, el) => {
       const $el = $(el);
-      const attrs = [
-        $el.attr("href"),
-        $el.attr("data-src"),
-        $el.attr("data-image"),
-        $el.attr("data-original"),
-        $el.attr("data-fancybox"),
-        $el.attr("data-large-image"),
-        $el.attr("src"),
-        $el.attr("data-lazy-src"),
-        $el.attr("data-large")
-      ];
-      attrs.forEach((value) => {
-        if (value) {
-          const before = candidates.length;
-          push(value, 100, order++);
-          if (candidates.length > before) galleryUrls.push(absoluteUrl(value));
-        }
-      });
+      for (const value of imageAttrs($el)) {
+        const url = normalizeImageUrl(value);
+        if (!url || seen.has(url)) continue;
+        seen.add(url);
+        urls.push({ url, position });
+        break;
+      }
     });
+
+    return urls;
+  };
+
+  let photos = [];
+
+  if (ranked.length) {
+    const selected = ranked[0];
+    diagnostics.gallerySelector = selected.selector;
+    diagnostics.selectedGalleryScore = selected.score;
+
+    const extracted = extractFromGallery(selected);
+    diagnostics.rawPhotoCount = extracted.length;
+
+    if (extracted.length >= 2) {
+      photos = extracted.map((item) => item.url);
+      diagnostics.source = "main-gallery";
+      diagnostics.confidence = selected.score >= 120 ? "high" : "medium";
+    } else {
+      diagnostics.suspicious = true;
+      diagnostics.reasons.push("Le conteneur de galerie identifié contient moins de 2 photos exploitables.");
+    }
   }
 
-  // If the gallery container was not identified, collect DOM image/link
-  // candidates while preserving document order.
-  if (!galleryUrls.length) {
-    $('a, img').each((_, el) => {
-      const $el = $(el);
-      const attrs = [
-        $el.attr("href"),
-        $el.attr("data-src"),
-        $el.attr("data-image"),
-        $el.attr("data-original"),
-        $el.attr("data-fancybox"),
-        $el.attr("data-large-image"),
-        $el.attr("src"),
-        $el.attr("data-lazy-src"),
-        $el.attr("data-large")
-      ];
-      const classText = ($el.attr("class") || "").toLowerCase();
-      const score = /gallery|galerie|photo|fancybox|swiper|carousel/.test(classText) ? 80 : 30;
-      attrs.forEach((value) => push(value, score, order++));
+  // Explicit structured-data fallback. We do NOT fall back to all <a>/<img>
+  // because that can silently import photos from other listings.
+  if (!photos.length) {
+    const jsonLdPhotos = [];
+    $('script[type="application/ld+json"]').each((_, el) => {
+      try {
+        const data = JSON.parse($(el).contents().text());
+        const walk = (node) => {
+          if (!node || typeof node !== "object") return;
+          if (Array.isArray(node)) return node.forEach(walk);
+
+          if (Array.isArray(node.image)) {
+            node.image.forEach((img) => {
+              const value = typeof img === "string" ? img : img?.url || img?.contentUrl;
+              const url = normalizeImageUrl(value);
+              if (url) jsonLdPhotos.push(url);
+            });
+          }
+
+          Object.values(node).forEach(walk);
+        };
+        walk(data);
+      } catch {}
     });
+
+    photos = [...new Set(jsonLdPhotos)];
+    if (photos.length) {
+      diagnostics.rawPhotoCount = photos.length;
+      diagnostics.uniquePhotoCount = photos.length;
+      diagnostics.source = "json-ld";
+      diagnostics.confidence = "medium";
+    }
   }
 
-  const unique = new Map();
-  for (const item of candidates) {
-    const existing = unique.get(item.url);
-    if (!existing || item.score > existing.score) unique.set(item.url, item);
+  diagnostics.uniquePhotoCount = [...new Set(photos)].length;
+
+  if (!photos.length) {
+    diagnostics.suspicious = true;
+    diagnostics.reasons.push("Aucune galerie structurée ou liste d'images JSON-LD exploitable n'a été trouvée.");
   }
 
-  let result = [...unique.values()]
-    .sort((a, b) => a.order - b.order)
-    .map((item) => item.url);
+  return {
+    images: [...new Set(photos)].slice(0, 30),
+    diagnostics
+  };
+}
 
-  // If a genuine gallery was found, do not append JSON-LD or recommended
-  // property images. JSON-LD is only a fallback when no gallery was found.
-  if (!galleryUrls.length && result.length === 0) {
-    result = jsonLdCandidates.map((url) => absoluteUrl(url)).filter(Boolean);
+function extractExpectedPhotoCount($, bodyText) {
+  const patterns = [
+    /(?:galerie|album|photos?|photographies?)\s*[:\-]?\s*(\d{1,2})\s*(?:photos?|images?)?/i,
+    /(\d{1,2})\s*(?:photos?|images?)\s*(?:originales?|disponibles?|dans la galerie)?/i
+  ];
+
+  for (const pattern of patterns) {
+    const match = String(bodyText || "").match(pattern);
+    if (match) {
+      const count = Number(match[1]);
+      if (count >= 1 && count <= 50) return count;
+    }
   }
 
-  return [...new Set(result)].slice(0, 20);
+  return null;
 }
 
 function parsePrice(text) {
@@ -263,7 +356,9 @@ function parseListing(html, sourceUrl) {
   });
 
   const title = structured.name || firstText($, ["h1", "title"]);
-  const images = collectImages($);
+  const photoExtraction = collectImages($);
+  const images = photoExtraction.images;
+  const expectedPhotoCount = extractExpectedPhotoCount($, bodyText);
 
   const property = {
     title,
@@ -277,6 +372,8 @@ function parseListing(html, sourceUrl) {
     description: firstText($, [".description", ".descriptif", "[class*='description']"]),
     images,
     imageCount: images.length,
+    expectedPhotoCount,
+    photoExtraction: photoExtraction.diagnostics,
     retrievedAt: new Date().toISOString()
   };
 
@@ -327,10 +424,11 @@ app.post("/api/scrape", async (req, res) => {
     const html = await response.text();
     const listing = parseListing(html, sourceUrl);
 
-    // Validate candidate images from the server side. This removes broken,
-    // non-image and stale gallery references before the browser displays them.
+    // Validate only the photos selected by the structured extractor.
+    // We never search the rest of the page if one photo fails.
     const validated = [];
-    for (const imageUrl of listing.images) {
+    for (let index = 0; index < listing.images.length; index++) {
+      const imageUrl = listing.images[index];
       try {
         const imageResponse = await fetch(imageUrl, {
           headers: {
@@ -339,14 +437,35 @@ app.post("/api/scrape", async (req, res) => {
         });
         const contentType = imageResponse.headers.get("content-type") || "";
         if (imageResponse.ok && contentType.startsWith("image/")) {
-          validated.push(imageUrl);
+          validated.push({
+            url: imageUrl,
+            position: validated.length + 1,
+            verified: true,
+            source: listing.photoExtraction.source
+          });
         }
       } catch {}
-      if (validated.length >= 15) break;
     }
 
-    listing.images = validated;
-    listing.imageCount = validated.length;
+    listing.images = validated.map((item) => item.url);
+    listing.imageCount = listing.images.length;
+    listing.photoExtraction.verifiedPhotoCount = listing.imageCount;
+
+    if (listing.expectedPhotoCount != null && listing.imageCount !== listing.expectedPhotoCount) {
+      listing.photoExtraction.suspicious = true;
+      listing.photoExtraction.reasons.push(
+        "Nombre de photos incohérent : " +
+        listing.imageCount +
+        " validée(s) pour " +
+        listing.expectedPhotoCount +
+        " attendue(s)."
+      );
+    }
+
+    const photoComplete =
+      listing.imageCount > 0 &&
+      !listing.photoExtraction.suspicious &&
+      (listing.expectedPhotoCount == null || listing.imageCount === listing.expectedPhotoCount);
 
     res.json({
       ok: true,
@@ -354,7 +473,9 @@ app.post("/api/scrape", async (req, res) => {
       photoPolicy: {
         originalOnly: true,
         generatedReplacementAllowed: false,
-        publishBlockedIfNoPhotos: listing.images.length === 0
+        publishBlockedIfNoPhotos: listing.images.length === 0,
+        publishBlockedIfIncomplete: !photoComplete,
+        publishAllowedForPhotoTest: photoComplete
       }
     });
   } catch (error) {
