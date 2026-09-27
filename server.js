@@ -315,6 +315,98 @@ function extractLogoUrl($) {
   return null;
 }
 
+function normalizeFactText(value) {
+  return cleanText(value)
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\\u0300-\\u036f]/g, "")
+    .replace(/[^a-z0-9²m€., -]/g, " ");
+}
+
+function factTokens(value) {
+  const stop = new Set([
+    "le","la","les","un","une","des","de","du","d","et","avec","sans","a","au","aux",
+    "en","sur","sous","dans","pour","par","plus","tres","très","grand","grande",
+    "petit","petite","beau","belle","agreable","agréable","charmant","charmante",
+    "situe","situé","situee","située","comprenant","comprend","possibilite","possibilité",
+    "plein","pied","espace","place","secteur","emplacement","vue","voir","annonce"
+  ]);
+  return [...new Set(
+    normalizeFactText(value)
+      .split(/\\s+/)
+      .map(x => x.replace(/^[^a-z0-9]+|[^a-z0-9]+$/g, ""))
+      .filter(x => x.length >= 3 && !stop.has(x))
+  )];
+}
+
+function buildFactCorpus(listing) {
+  return [
+    listing.title,
+    listing.price,
+    listing.location,
+    listing.surface,
+    listing.terrain,
+    listing.rooms != null ? String(listing.rooms) + " pièces" : "",
+    listing.bedrooms != null ? String(listing.bedrooms) + " chambres" : "",
+    listing.description,
+    ...(listing.highlights || [])
+  ].filter(Boolean).join(" ");
+}
+
+function validateClaimAgainstListing(claim, listing) {
+  const text = cleanText(claim);
+  if (!text) return { approved: false, reason: "empty", claim: text };
+
+  const corpus = normalizeFactText(buildFactCorpus(listing));
+  const tokens = factTokens(text);
+
+  // A claim must be grounded in the scraped listing facts.
+  // Generic editorial words are ignored; substantive words must appear in source facts.
+  const unsupported = tokens.filter(token => {
+    if (/^\\d+(?:[.,]\\d+)?$/.test(token)) return !corpus.includes(token);
+    return !corpus.includes(token);
+  });
+
+  // Strong numeric guard: every number in a claim must exist in the source facts.
+  const numbers = normalizeFactText(text).match(/\\d+(?:[.,]\\d+)?/g) || [];
+  const badNumbers = numbers.filter(n => !corpus.includes(n));
+
+  if (unsupported.length || badNumbers.length) {
+    return {
+      approved: false,
+      reason: "claim-not-grounded",
+      claim: text,
+      unsupported: [...new Set([...unsupported, ...badNumbers])]
+    };
+  }
+
+  return { approved: true, reason: "grounded", claim: text };
+}
+
+function validateGeneratedContent(listing, content) {
+  const fields = ["title", "subtitle", "highlights"];
+  const results = [];
+
+  for (const field of fields) {
+    const values = field === "highlights"
+      ? (Array.isArray(content?.[field]) ? content[field] : [])
+      : [content?.[field]];
+
+    for (const value of values) {
+      if (!value) continue;
+      results.push({ field, ...validateClaimAgainstListing(value, listing) });
+    }
+  }
+
+  const rejected = results.filter(item => !item.approved);
+  return {
+    approved: rejected.length === 0,
+    checked: results.length,
+    rejected: rejected.length,
+    results
+  };
+}
+
 function extractHighlights(bodyText) {
   const source = cleanText(bodyText);
   const rules = [
@@ -795,26 +887,81 @@ app.post("/api/ai-layout", async (req, res) => {
     plan.title = cleanText(plan.title || listing.title || "Bien immobilier");
     plan.subtitle = cleanText(plan.subtitle || "");
 
-    plan.highlights = (Array.isArray(plan.highlights) ? plan.highlights : [])
+    const aiHighlights = (Array.isArray(plan.highlights) ? plan.highlights : [])
       .map((x) => cleanText(x))
       .filter(Boolean)
       .slice(0, 6);
 
+    // DATA CONTROLLER:
+    // Never publish a generated claim unless it can be grounded in the scraped listing.
+    const checkedHighlights = aiHighlights.map(claim => ({
+      claim,
+      check: validateClaimAgainstListing(claim, listing)
+    }));
+
+    const approvedHighlights = checkedHighlights
+      .filter(item => item.check.approved)
+      .map(item => item.claim);
+
+    // Rejected AI claims are replaced only by factual highlights extracted from the listing.
     for (const fallback of listing.highlights || []) {
-      if (plan.highlights.length >= 6) break;
-      if (!plan.highlights.includes(fallback)) plan.highlights.push(fallback);
+      if (approvedHighlights.length >= 6) break;
+      const check = validateClaimAgainstListing(fallback, listing);
+      if (check.approved && !approvedHighlights.includes(fallback)) {
+        approvedHighlights.push(fallback);
+      }
     }
-    while (plan.highlights.length < 6) plan.highlights.push("Voir l'annonce");
+
+    while (approvedHighlights.length < 6) approvedHighlights.push("Voir l'annonce");
+
+    plan.highlights = approvedHighlights.slice(0, 6);
+
+    // Title/subtitle are also checked. If Gemini invents wording, use deterministic source data.
+    const titleCheck = validateClaimAgainstListing(plan.title, listing);
+    if (!titleCheck.approved) plan.title = cleanText(listing.title || "Bien immobilier");
+
+    const subtitleFallback = [
+      listing.rooms != null ? String(listing.rooms) + " pièces" : "",
+      listing.bedrooms != null ? String(listing.bedrooms) + " chambres" : "",
+      listing.surface || ""
+    ].filter(Boolean).join(" · ");
+    const subtitleCheck = validateClaimAgainstListing(plan.subtitle, listing);
+    if (!subtitleCheck.approved) plan.subtitle = subtitleFallback;
+
+    const dataController = {
+      status: "controlled",
+      checkedClaims: checkedHighlights.length + 2,
+      rejectedClaims: checkedHighlights.filter(item => !item.check.approved).length +
+        (titleCheck.approved ? 0 : 1) +
+        (subtitleCheck.approved ? 0 : 1),
+      approvedHighlights: plan.highlights.filter(x => x !== "Voir l'annonce").length,
+      rule: "Aucune caractéristique non présente dans l'annonce source n'est autorisée."
+    };
 
     res.json({
       ok: true,
       provider,
       model,
       plan,
-      originalPhotosOnly: true
+      originalPhotosOnly: true,
+      dataController
     });
   } catch (error) {
     res.status(500).json({ ok: false, error: error.message || "Erreur IA." });
+  }
+});
+
+app.post("/api/validate-content", (req, res) => {
+  try {
+    const listing = req.body?.listing;
+    const content = req.body?.content;
+    if (!listing || !content) {
+      return res.status(400).json({ ok: false, error: "Annonce et contenu à contrôler obligatoires." });
+    }
+    const dataController = validateGeneratedContent(listing, content);
+    res.json({ ok: true, dataController });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message || "Erreur du contrôleur de données." });
   }
 });
 
