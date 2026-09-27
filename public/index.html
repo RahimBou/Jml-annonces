@@ -512,7 +512,9 @@ async function renderJmlTemplate() {
   if (bottomLogo) {
     // The official SVG is square with intentional whitespace around the artwork.
     // Crop only that whitespace; the artwork itself is never recreated or altered.
-    ctx.drawImage(bottomLogo,55,135,245,100,920,FOOTER_Y+6,265,88);
+    // The SVG has a 500x500 viewport while its actual artwork sits around
+    // x=90..390 / y=190..300. Crop that transparent/empty area only.
+    ctx.drawImage(bottomLogo,80,180,340,130,915,FOOTER_Y+8,285,82);
   }
 
   $("visualSection").style.display="block";
