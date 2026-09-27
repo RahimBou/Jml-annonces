@@ -901,7 +901,7 @@ app.post("/api/scrape", async (req, res) => {
       }
     });
 
-    if (!response.ok) {
+    if (!response || !response.ok) {
       return res.status(502).json({
         ok: false,
         error: `JML a répondu avec le statut HTTP ${response.status}.`
@@ -1455,26 +1455,32 @@ app.post("/api/social-copy", async (req, res) => {
     };
 
     const geminiKey = process.env.GEMINI_API_KEY;
-    if (!geminiKey) return res.status(503).json({ok:false,error:"GEMINI_API_KEY manquante."});
+    const openRouterKey = process.env.OPENROUTER_API_KEY;
 
     let model = process.env.GEMINI_MODEL || "gemini-3.8-flash";
-    let response = await fetch(
-      "https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":generateContent",
-      {
-        method:"POST",
-        headers:{"Content-Type":"application/json","x-goog-api-key":geminiKey},
-        body:JSON.stringify({
-          contents:[{role:"user",parts:[{text:prompt+"\n\nDONNÉES SOURCE :\n"+JSON.stringify(facts)}]}],
-          generationConfig:{
-            responseFormat:{text:{mimeType:"APPLICATION_JSON",schema}},
-            thinkingConfig:{thinkingLevel:"low"}
-          }
-        })
-      }
-    );
-
-    let payload = await response.json();
+    let response = null;
+    let payload = {};
     let successfulModel = model;
+
+    if (geminiKey) {
+          let response = await fetch(
+            "https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":generateContent",
+            {
+              method:"POST",
+              headers:{"Content-Type":"application/json","x-goog-api-key":geminiKey},
+              body:JSON.stringify({
+                contents:[{role:"user",parts:[{text:prompt+"\n\nDONNÉES SOURCE :\n"+JSON.stringify(facts)}]}],
+                generationConfig:{
+                  responseFormat:{text:{mimeType:"APPLICATION_JSON",schema}},
+                  thinkingConfig:{thinkingLevel:"low"}
+                }
+              })
+            }
+          );
+      
+      
+    }
+    if (response) payload = await response.json();
 
     // Same resilience policy as the visual planner: temporary Gemini load
     // errors are retried and then handled by a stable Flash fallback.
@@ -1510,7 +1516,7 @@ app.post("/api/social-copy", async (req, res) => {
 
     // If Gemini is saturated, use OpenRouter's free-model router for SOCIAL COPY only.
     // OpenRouter is OpenAI-compatible and its free router selects an available free model.
-    if (!response.ok && process.env.OPENROUTER_API_KEY) {
+    if ((!response || !response.ok) && process.env.OPENROUTER_API_KEY) {
       const openRouterResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method:"POST",
         headers:{
@@ -1575,13 +1581,58 @@ app.post("/api/social-copy", async (req, res) => {
       }
     }
 
-    if (!response.ok) return res.status(502).json({
+    // Deterministic local fallback: social preparation must remain available
+    // even when both free AI providers hit their quotas. It uses only source facts.
+    const localHighlights = (facts.highlights || []).filter(Boolean).slice(0, 6);
+    const factLines = [
+      facts.location ? "À vendre à " + facts.location + "." : "",
+      facts.type ? facts.type + "." : "",
+      facts.price ? "Prix : " + facts.price + "." : "",
+      facts.surface ? "Surface : " + facts.surface + "." : "",
+      facts.terrain ? "Terrain : " + facts.terrain + "." : "",
+      facts.bedrooms != null ? String(facts.bedrooms) + " chambres." : "",
+      facts.rooms != null ? String(facts.rooms) + " pièces." : "",
+      localHighlights.length ? "Points clés : " + localHighlights.join(", ") + "." : "",
+      facts.reference ? "Référence : " + facts.reference + "." : ""
+    ].filter(Boolean);
+
+    const localBase = factLines.join(" ");
+    const localCopies = {
+      facebook: localBase + " Pour organiser une visite, contactez-moi.",
+      instagram: localBase + " #immobilier #venteimmobiliere",
+      linkedin: localBase + " Présentation factuelle de l'annonce.",
+    };
+
+    const localChecks = {};
+    for (const platform of ["facebook","instagram","linkedin"]) {
+      localChecks[platform] = validateClaimAgainstListing(localCopies[platform], listing);
+    }
+
+    if (Object.values(localChecks).every(v => v.approved)) {
+      return res.json({
+        ok:true,
+        model:"local-fallback",
+        provider:"deterministic",
+        copies:localCopies,
+        controller:{
+          status:"controlled",
+          platforms:3,
+          rejected:0,
+          rule:"Textes locaux construits uniquement à partir des données de l'annonce source."
+        }
+      });
+    }
+
+    if (!geminiKey && !openRouterKey) {
+      return res.status(503).json({
+        ok:false,
+        error:"Aucun moteur disponible pour préparer les publications."
+      });
+    }
+
+    if (!response?.ok) return res.status(502).json({
       ok:false,
-      error:"Gemini temporairement indisponible. " +
-        (process.env.OPENROUTER_API_KEY
-          ? "Le secours OpenRouter gratuit n'a pas pu produire un texte contrôlé. "
-          : "Ajoute OPENROUTER_API_KEY dans Render pour activer le secours gratuit. ") +
-        (payload?.error?.message || "Réessayez dans quelques instants.")
+      error:"Les moteurs IA sont temporairement indisponibles et le texte local n'a pas pu être contrôlé."
     });
 
     const raw = payload?.candidates?.[0]?.content?.parts?.map(p=>p.text||"").join("") || "";
