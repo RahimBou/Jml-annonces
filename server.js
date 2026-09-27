@@ -1385,9 +1385,80 @@ app.post("/api/social-copy", async (req, res) => {
       }
     }
 
+    // If Gemini is saturated, use OpenRouter's free-model router for SOCIAL COPY only.
+    // OpenRouter is OpenAI-compatible and its free router selects an available free model.
+    if (!response.ok && process.env.OPENROUTER_API_KEY) {
+      const openRouterResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method:"POST",
+        headers:{
+          "Content-Type":"application/json",
+          "Authorization":"Bearer " + process.env.OPENROUTER_API_KEY,
+          "HTTP-Referer": appBaseUrl(req),
+          "X-Title":"JML Annonces"
+        },
+        body:JSON.stringify({
+          model:"openrouter/free",
+          messages:[
+            {
+              role:"system",
+              content:prompt + "\n\nRetourne uniquement un objet JSON valide avec les clés facebook, instagram et linkedin."
+            },
+            {
+              role:"user",
+              content:"DONNÉES SOURCE :\n" + JSON.stringify(facts)
+            }
+          ],
+          response_format:{
+            type:"json_schema",
+            json_schema:{
+              name:"jml_social_copies",
+              strict:true,
+              schema
+            }
+          },
+          temperature:0.5,
+          max_tokens:1200
+        })
+      });
+
+      const openRouterPayload = await openRouterResponse.json();
+      if (openRouterResponse.ok) {
+        const openRouterRaw = openRouterPayload?.choices?.[0]?.message?.content || "";
+        if (openRouterRaw) {
+          try {
+            const openRouterCopies = JSON.parse(openRouterRaw);
+            const openRouterChecks = {};
+            for (const platform of ["facebook","instagram","linkedin"]) {
+              openRouterChecks[platform] = validateClaimAgainstListing(openRouterCopies[platform], listing);
+            }
+            const openRouterRejected = Object.entries(openRouterChecks).filter(([,v])=>!v.approved);
+            if (!openRouterRejected.length) {
+              res.json({
+                ok:true,
+                model:"openrouter/free",
+                provider:"openrouter",
+                copies:openRouterCopies,
+                controller:{
+                  status:"controlled",
+                  platforms:3,
+                  rejected:0,
+                  rule:"Les trois textes sont contrôlés contre les données de l'annonce source."
+                }
+              });
+              return;
+            }
+          } catch {}
+        }
+      }
+    }
+
     if (!response.ok) return res.status(502).json({
       ok:false,
-      error:"Gemini ("+model+") temporairement indisponible. "+(payload?.error?.message || "Réessayez dans quelques instants.")
+      error:"Gemini temporairement indisponible. " +
+        (process.env.OPENROUTER_API_KEY
+          ? "Le secours OpenRouter gratuit n'a pas pu produire un texte contrôlé. "
+          : "Ajoute OPENROUTER_API_KEY dans Render pour activer le secours gratuit. ") +
+        (payload?.error?.message || "Réessayez dans quelques instants.")
     });
 
     const raw = payload?.candidates?.[0]?.content?.parts?.map(p=>p.text||"").join("") || "";
