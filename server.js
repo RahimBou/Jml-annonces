@@ -946,8 +946,9 @@ app.post("/api/ai-layout", async (req, res) => {
       }
     }
 
-    while (approvedHighlights.length < 6) approvedHighlights.push("Voir l'annonce");
-
+    // Never fill the highlights with generic calls to action.
+    // If the listing contains fewer than six factual highlights, keep only
+    // the verified facts rather than inventing a seventh item.
     plan.highlights = approvedHighlights.slice(0, 6);
 
     // Title/subtitle are also checked. If Gemini invents wording, use deterministic source data.
