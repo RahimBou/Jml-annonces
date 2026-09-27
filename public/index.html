@@ -133,32 +133,49 @@ function fitCanvasText(ctx, text, x, y, maxWidth, font, minPx = 10) {
   ctx.fillText(String(text || ""), x, y);
 }
 
-function drawTwoLineFit(ctx, text, x, y, maxWidth, maxSize = 14, minSize = 10) {
+function drawTwoLineFit(ctx, text, x, y, maxWidth, maxSize = 14, minSize = 9) {
   const value = String(text || "").trim();
   if (!value) return;
-  const words = value.split(/\\s+/);
-  let line1 = "", line2 = "";
-  for (const word of words) {
-    const candidate = line1 ? line1 + " " + word : word;
-    if (ctx.measureText(candidate).width <= maxWidth || !line1) line1 = candidate;
-    else line2 = line2 ? line2 + " " + word : word;
+
+  const words = value.split(/\s+/);
+  let best = null;
+
+  // Find a two-line split that fits without ever truncating the text.
+  for (let split = 1; split < words.length; split++) {
+    const line1 = words.slice(0, split).join(" ");
+    const line2 = words.slice(split).join(" ");
+    for (let size = maxSize; size >= minSize; size -= 0.5) {
+      ctx.font = "bold " + size + "px Georgia";
+      if (
+        ctx.measureText(line1).width <= maxWidth &&
+        ctx.measureText(line2).width <= maxWidth
+      ) {
+        const balance = Math.abs(line1.length - line2.length);
+        if (!best || size > best.size || (size === best.size && balance < best.balance)) {
+          best = { line1, line2, size, balance };
+        }
+        break;
+      }
+    }
   }
-  if (!line2 && ctx.measureText(line1).width <= maxWidth) {
-    fitCanvasText(ctx, line1, x, y, maxWidth, "bold " + maxSize + "px Georgia", minSize);
+
+  if (!best) {
+    // Last resort: one line with the smallest readable font.
+    ctx.font = "bold " + minSize + "px Georgia";
+    let line = value;
+    while (ctx.measureText(line).width > maxWidth && line.length > 1) {
+      // Remove whole words only if absolutely necessary; never add "...".
+      const next = line.slice(0, line.lastIndexOf(" "));
+      if (!next || next === line) break;
+      line = next;
+    }
+    ctx.fillText(line, x, y);
     return;
   }
-  if (line2 && ctx.measureText(line2).width > maxWidth) {
-    let size = maxSize;
-    while (size > minSize) {
-      ctx.font = "bold " + size + "px Georgia";
-      if (ctx.measureText(line1).width <= maxWidth && ctx.measureText(line2).width <= maxWidth) break;
-      size -= 0.5;
-    }
-  } else {
-    ctx.font = "bold " + maxSize + "px Georgia";
-  }
-  ctx.fillText(line1, x, y - 8);
-  if (line2) ctx.fillText(line2, x, y + 12);
+
+  ctx.font = "bold " + best.size + "px Georgia";
+  ctx.fillText(best.line1, x, y - 8);
+  ctx.fillText(best.line2, x, y + 12);
 }
 
 function cropCanvasImage(ctx, img, x, y, w, h) {
