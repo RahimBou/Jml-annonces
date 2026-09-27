@@ -510,7 +510,9 @@ async function renderJmlTemplate() {
 
   const bottomLogo = await loadLocalCanvasImage("/jml-logo-officiel.svg");
   if (bottomLogo) {
-    ctx.drawImage(bottomLogo,925,FOOTER_Y+3,255,96);
+    // The official SVG is square with intentional whitespace around the artwork.
+    // Crop only that whitespace; the artwork itself is never recreated or altered.
+    ctx.drawImage(bottomLogo,55,135,245,100,920,FOOTER_Y+6,265,88);
   }
 
   $("visualSection").style.display="block";
