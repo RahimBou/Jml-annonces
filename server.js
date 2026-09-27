@@ -954,6 +954,108 @@ app.post("/api/ai-layout", async (req, res) => {
   }
 });
 
+app.post("/api/social-copy", async (req, res) => {
+  try {
+    const listing = req.body?.listing;
+    if (!listing) return res.status(400).json({ ok:false, error:"Annonce manquante." });
+
+    const facts = {
+      type: listing.title || null,
+      reference: listing.reference || null,
+      price: listing.price || null,
+      location: listing.location || null,
+      surface: listing.surface || null,
+      terrain: listing.terrain || null,
+      rooms: listing.rooms || null,
+      bedrooms: listing.bedrooms || null,
+      description: listing.description || null,
+      highlights: listing.aiPlan?.highlights || listing.highlights || []
+    };
+
+    const prompt = [
+      "Tu es le rédacteur social media de JML Immobilier.",
+      "Produis trois textes de publication en français pour la même annonce.",
+      "FACEBOOK : texte chaleureux et concret, avec appel à la visite.",
+      "INSTAGRAM : texte court et visuel, avec hashtags locaux pertinents.",
+      "LINKEDIN : texte professionnel, factuel et sobre.",
+      "N'invente AUCUNE caractéristique, aucun équipement, aucun chiffre, aucun avantage.",
+      "Utilise uniquement les données fournies.",
+      "Ne mentionne jamais une information absente.",
+      "Ne promets jamais une performance, une vente rapide ou une qualité non documentée.",
+      "Indique le prix, la référence et le contact uniquement lorsqu'ils sont fournis.",
+      "Réponds uniquement en JSON."
+    ].join(" ");
+
+    const schema = {
+      type:"object",
+      properties:{
+        facebook:{type:"string"},
+        instagram:{type:"string"},
+        linkedin:{type:"string"}
+      },
+      required:["facebook","instagram","linkedin"],
+      propertyOrdering:["facebook","instagram","linkedin"]
+    };
+
+    const geminiKey = process.env.GEMINI_API_KEY;
+    if (!geminiKey) return res.status(503).json({ok:false,error:"GEMINI_API_KEY manquante."});
+
+    const model = process.env.GEMINI_MODEL || "gemini-3.8-flash";
+    const response = await fetch(
+      "https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":generateContent",
+      {
+        method:"POST",
+        headers:{"Content-Type":"application/json","x-goog-api-key":geminiKey},
+        body:JSON.stringify({
+          contents:[{role:"user",parts:[{text:prompt+"\n\nDONNÉES SOURCE :\n"+JSON.stringify(facts)}]}],
+          generationConfig:{
+            responseFormat:{text:{mimeType:"APPLICATION_JSON",schema}},
+            thinkingConfig:{thinkingLevel:"low"}
+          }
+        })
+      }
+    );
+
+    const payload = await response.json();
+    if (!response.ok) return res.status(502).json({
+      ok:false,
+      error:"Gemini ("+model+") : "+(payload?.error?.message || "erreur lors de la génération.")
+    });
+
+    const raw = payload?.candidates?.[0]?.content?.parts?.map(p=>p.text||"").join("") || "";
+    if (!raw) throw new Error("Réponse Gemini vide.");
+    const copies = JSON.parse(raw);
+
+    const checks = {};
+    for (const platform of ["facebook","instagram","linkedin"]) {
+      checks[platform] = validateClaimAgainstListing(copies[platform], listing);
+    }
+
+    const rejected = Object.entries(checks).filter(([,v])=>!v.approved);
+    if (rejected.length) {
+      return res.status(422).json({
+        ok:false,
+        error:"Contrôle des textes échoué : une ou plusieurs publications contiennent des informations non justifiées.",
+        checks
+      });
+    }
+
+    res.json({
+      ok:true,
+      model,
+      copies,
+      controller:{
+        status:"controlled",
+        platforms:3,
+        rejected:0,
+        rule:"Les trois textes sont contrôlés contre les données de l'annonce source."
+      }
+    });
+  } catch(error) {
+    res.status(500).json({ok:false,error:error.message || "Erreur de génération des textes."});
+  }
+});
+
 app.post("/api/validate-content", (req, res) => {
   try {
     const listing = req.body?.listing;
