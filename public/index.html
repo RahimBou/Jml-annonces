@@ -154,51 +154,85 @@ function fitCanvasText(ctx, text, x, y, maxWidth, font, minPx = 10) {
   ctx.fillText(String(text || ""), x, y);
 }
 
-function drawTwoLineFit(ctx, text, x, y, maxWidth, maxSize = 14, minSize = 9) {
+function drawTwoLineFit(ctx, text, x, y, maxWidth, maxSize = 18, minSize = 10) {
   const value = String(text || "").trim();
   if (!value) return;
 
   const words = value.split(/\s+/);
-  let best = null;
+  const candidates = [];
 
-  // Find a two-line split that fits without ever truncating the text.
+  // Prefer 2 lines and the largest possible font.
   for (let split = 1; split < words.length; split++) {
     const line1 = words.slice(0, split).join(" ");
     const line2 = words.slice(split).join(" ");
     for (let size = maxSize; size >= minSize; size -= 0.5) {
       ctx.font = "bold " + size + "px Georgia";
-      if (
-        ctx.measureText(line1).width <= maxWidth &&
-        ctx.measureText(line2).width <= maxWidth
-      ) {
-        const balance = Math.abs(line1.length - line2.length);
-        if (!best || size > best.size || (size === best.size && balance < best.balance)) {
-          best = { line1, line2, size, balance };
-        }
+      if (ctx.measureText(line1).width <= maxWidth && ctx.measureText(line2).width <= maxWidth) {
+        candidates.push({
+          lines: [line1, line2],
+          size,
+          balance: Math.abs(line1.length - line2.length)
+        });
         break;
       }
     }
   }
 
-  if (!best) {
-    // Last resort: one line with the smallest readable font.
-    ctx.font = "bold " + minSize + "px Georgia";
-    let line = value;
-    while (ctx.measureText(line).width > maxWidth && line.length > 1) {
-      // Remove whole words only if absolutely necessary; never add "...".
-      const next = line.slice(0, line.lastIndexOf(" "));
-      if (!next || next === line) break;
-      line = next;
+  // If a longer factual highlight needs it, use 3 lines rather than cutting text.
+  if (!candidates.length) {
+    for (let a = 1; a < words.length - 1; a++) {
+      for (let b = a + 1; b < words.length; b++) {
+        const lines = [
+          words.slice(0, a).join(" "),
+          words.slice(a, b).join(" "),
+          words.slice(b).join(" ")
+        ];
+        for (let size = maxSize; size >= minSize; size -= 0.5) {
+          ctx.font = "bold " + size + "px Georgia";
+          if (lines.every(line => ctx.measureText(line).width <= maxWidth)) {
+            candidates.push({
+              lines,
+              size,
+              balance: Math.max(...lines.map(line => line.length)) -
+                Math.min(...lines.map(line => line.length))
+            });
+            break;
+          }
+        }
+      }
     }
-    ctx.fillText(line, x, y);
+  }
+
+  if (candidates.length) {
+    candidates.sort((a,b) => b.size - a.size || a.balance - b.balance);
+    const best = candidates[0];
+    ctx.font = "bold " + best.size + "px Georgia";
+    ctx.textAlign = "left";
+    if (best.lines.length === 2) {
+      ctx.fillText(best.lines[0], x, y - 9);
+      ctx.fillText(best.lines[1], x, y + 13);
+    } else {
+      ctx.fillText(best.lines[0], x, y - 18);
+      ctx.fillText(best.lines[1], x, y);
+      ctx.fillText(best.lines[2], x, y + 18);
+    }
     return;
   }
 
-  ctx.font = "bold " + best.size + "px Georgia";
-  ctx.fillText(best.line1, x, y - 8);
-  ctx.fillText(best.line2, x, y + 12);
+  // Absolute fallback: shrink the complete text until it fits on one line.
+  // Never remove words and never add an ellipsis.
+  let size = maxSize;
+  while (size > 6) {
+    ctx.font = "bold " + size + "px Georgia";
+    if (ctx.measureText(value).width <= maxWidth) {
+      ctx.fillText(value, x, y);
+      return;
+    }
+    size -= 0.5;
+  }
+  ctx.font = "bold 6px Georgia";
+  ctx.fillText(value, x, y);
 }
-
 function cropCanvasImage(ctx, img, x, y, w, h) {
   const scale = Math.max(w / img.naturalWidth, h / img.naturalHeight);
   const sw = w / scale, sh = h / scale;
@@ -212,6 +246,15 @@ function loadCanvasImage(src) {
     img.onload = () => resolve(img);
     img.onerror = () => resolve(null);
     img.src = "/api/image?url=" + encodeURIComponent(src);
+  });
+}
+
+function loadLocalCanvasImage(src) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = src;
   });
 }
 
@@ -257,7 +300,7 @@ async function renderJmlTemplate() {
   ctx.fillRect(0,0,475,175);
 
   // Fixed JML master logo: same asset on every generated visual.
-  const logo = await loadCanvasImage("/jml-logo.svg");
+  const logo = await loadLocalCanvasImage("/jml-logo.svg");
   if (logo) {
     ctx.drawImage(logo,28,12,430,115);
   }
@@ -367,8 +410,7 @@ async function renderJmlTemplate() {
     ctx.fillText("◆",x+34,HIGHLIGHTS_Y+53);
     ctx.textAlign="left";
     ctx.fillStyle=WHITE;
-    ctx.font = "bold 14px Georgia";
-    drawTwoLineFit(ctx,item,x+58,HIGHLIGHTS_Y+43,colW-72,14,10);
+    drawTwoLineFit(ctx,item,x+58,HIGHLIGHTS_Y+52,colW-72,18,10);
   });
 
   // CONTACT FOOTER — fixed bottom area.
@@ -399,10 +441,14 @@ async function renderJmlTemplate() {
   ctx.fillText("Agent commercial indépendant",552,FOOTER_Y+58);
   ctx.fillText("Réseau JML Immobilier",552,FOOTER_Y+80);
 
-  // Bottom right master logo.
-  const bottomLogo = await loadCanvasImage("/jml-logo.svg");
+  // Bottom right master logo — loaded directly from the local JML asset
+  // so the logo is guaranteed to render on the generated canvas.
+  ctx.fillStyle=GOLD;
+  ctx.fillRect(900,FOOTER_Y+17,2,68);
+
+  const bottomLogo = await loadLocalCanvasImage("/jml-logo.svg");
   if (bottomLogo) {
-    ctx.drawImage(bottomLogo,935,FOOTER_Y+12,235,63);
+    ctx.drawImage(bottomLogo,928,FOOTER_Y+10,255,68);
   }
 
   $("visualSection").style.display="block";
