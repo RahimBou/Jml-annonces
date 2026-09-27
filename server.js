@@ -298,6 +298,60 @@ app.get("/api/social/callback/:provider", async (req, res) => {
   }
 });
 
+app.post("/api/social/publish/facebook", async (req, res) => {
+  try {
+    const stored = readSocialAccounts(req);
+    const account = stored.facebook;
+    if (!account?.accessToken || !account?.pageId) {
+      return res.status(401).json({ ok:false, error:"Compte Facebook connecté ou Page Facebook introuvable." });
+    }
+
+    const message = cleanText(req.body?.message || "");
+    const imageData = String(req.body?.imageData || "");
+    if (!message) return res.status(400).json({ ok:false, error:"Texte Facebook manquant." });
+    if (!imageData.startsWith("data:image/")) {
+      return res.status(400).json({ ok:false, error:"Visuel JML manquant." });
+    }
+
+    const match = imageData.match(/^data:(image\\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+    if (!match) return res.status(400).json({ ok:false, error:"Format du visuel invalide." });
+
+    const buffer = Buffer.from(match[2], "base64");
+    if (!buffer.length || buffer.length > 8 * 1024 * 1024) {
+      return res.status(413).json({ ok:false, error:"Le visuel est trop volumineux." });
+    }
+
+    const form = new FormData();
+    form.append("source", new Blob([buffer], { type: match[1] }), "JML-annonce.png");
+    form.append("caption", message);
+    form.append("published", "true");
+    form.append("access_token", account.accessToken);
+
+    const graphVersion = process.env.META_GRAPH_VERSION || "v23.0";
+    const graphResponse = await fetch(
+      "https://graph.facebook.com/" + graphVersion + "/" + encodeURIComponent(account.pageId) + "/photos",
+      { method:"POST", body:form }
+    );
+    const payload = await graphResponse.json();
+
+    if (!graphResponse.ok || !payload?.id) {
+      return res.status(502).json({
+        ok:false,
+        error: payload?.error?.message || "Meta n'a pas accepté la publication."
+      });
+    }
+
+    res.json({
+      ok:true,
+      provider:"facebook",
+      postId:payload.id,
+      message:"Publication Facebook envoyée sur la Page connectée."
+    });
+  } catch (error) {
+    res.status(500).json({ ok:false, error:error.message || "Erreur lors de la publication Facebook." });
+  }
+});
+
 app.post("/api/social/disconnect/:provider", (req, res) => {
   const provider = String(req.params.provider || "").toLowerCase();
   const stored = readSocialAccounts(req);
