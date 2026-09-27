@@ -553,6 +553,10 @@ async function renderJmlTemplate() {
   }
 
   $("visualSection").style.display="block";
+  // The social-copy section must be visible before the share buttons are used.
+  // It is enabled as soon as the visual is ready; the copy button itself still
+  // requires the Gemini/data-controller plan before generating any text.
+  $("socialSection").style.display="block";
   $("shareSection").style.display="block";
 }
 
