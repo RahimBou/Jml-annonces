@@ -636,7 +636,7 @@ function factTokens(value) {
     "maison","appartement","secteur","quartier","ideal","idéale","ideale","idéalement",
     "exclusif","exclusive","magnifique","superbe","joli","jolie","local","locaux",
     "venez","echange","échange","demande","message","messages","appelez","appeler",
-    "écrivez","ecrivez","repondre","répondre","facebook","instagram","linkedin","hashtags"
+    "écrivez","ecrivez","repondre","répondre","facebook","instagram","linkedin","hashtags","vendre","prix","surface","terrain","chambres","pièces","points","clés","référence","presentation","présentation","factuelle"
   ]);
   return [...new Set(
     normalizeFactText(value)
@@ -1484,7 +1484,7 @@ app.post("/api/social-copy", async (req, res) => {
 
     // Same resilience policy as the visual planner: temporary Gemini load
     // errors are retried and then handled by a stable Flash fallback.
-    if (!response.ok && (response.status === 429 || response.status === 503)) {
+    if (response && !response.ok && (response.status === 429 || response.status === 503)) {
       for (const candidateModel of [...new Set([model, "gemini-3.7-flash", "gemini-3.6-flash"])]) {
         if (candidateModel === model) {
           // The first request has already been made; retry it once.
@@ -1598,9 +1598,9 @@ app.post("/api/social-copy", async (req, res) => {
 
     const localBase = factLines.join(" ");
     const localCopies = {
-      facebook: localBase + " Pour organiser une visite, contactez-moi.",
+      facebook: localBase,
       instagram: localBase + " #immobilier #venteimmobiliere",
-      linkedin: localBase + " Présentation factuelle de l'annonce.",
+      linkedin: localBase,
     };
 
     const localChecks = {};
