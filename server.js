@@ -1334,7 +1334,7 @@ app.post("/api/social-copy", async (req, res) => {
     const geminiKey = process.env.GEMINI_API_KEY;
     if (!geminiKey) return res.status(503).json({ok:false,error:"GEMINI_API_KEY manquante."});
 
-    const model = process.env.GEMINI_MODEL || "gemini-3.8-flash";
+    let model = process.env.GEMINI_MODEL || "gemini-3.8-flash";
     let response = await fetch(
       "https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":generateContent",
       {
