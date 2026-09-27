@@ -727,56 +727,70 @@ function validateGeneratedContent(listing, content) {
 
 function buildLocalSocialCopies(listing) {
   const facts = {
-    type: listing.title || "",
-    reference: listing.reference || "",
-    price: listing.price || "",
-    location: listing.location || "",
-    surface: listing.surface || "",
-    terrain: listing.terrain || "",
+    type: cleanText(listing.title || ""),
+    reference: cleanText(listing.reference || ""),
+    price: cleanText(listing.price || ""),
+    location: cleanText(listing.location || ""),
+    surface: cleanText(listing.surface || ""),
+    terrain: cleanText(listing.terrain || ""),
     rooms: listing.rooms != null ? String(listing.rooms) : "",
     bedrooms: listing.bedrooms != null ? String(listing.bedrooms) : "",
+    description: cleanText(listing.description || ""),
     highlights: Array.isArray(listing.aiPlan?.highlights)
-      ? listing.aiPlan.highlights
-      : (Array.isArray(listing.highlights) ? listing.highlights : [])
+      ? listing.aiPlan.highlights.filter(Boolean).slice(0, 6)
+      : (Array.isArray(listing.highlights) ? listing.highlights.filter(Boolean).slice(0, 6) : [])
   };
 
-  const headline = [
-    facts.type,
-    facts.location ? "à " + facts.location : ""
-  ].filter(Boolean).join(" ");
+  const location = facts.location ? " à " + facts.location : "";
+  const reference = facts.reference ? "Réf. " + facts.reference : "";
 
-  const details = [
-    facts.price ? "Prix : " + facts.price : "",
-    facts.surface ? "Surface : " + facts.surface : "",
-    facts.terrain ? "Terrain : " + facts.terrain : "",
-    facts.bedrooms ? facts.bedrooms + " chambres" : "",
-    facts.rooms ? facts.rooms + " pièces" : ""
+  const specs = [
+    facts.surface ? "📐 " + facts.surface : "",
+    facts.terrain ? "🌳 Terrain " + facts.terrain : "",
+    facts.bedrooms ? "🛏️ " + facts.bedrooms + " chambres" : "",
+    facts.rooms ? "🚪 " + facts.rooms + " pièces" : ""
   ].filter(Boolean);
 
-  const keyFacts = facts.highlights.filter(Boolean).slice(0, 6);
-  const detailSentence = details.length ? details.join(" · ") + "." : "";
-  const highlightsSentence = keyFacts.length
-    ? "Points clés : " + keyFacts.join(" · ") + "."
-    : "";
-  const refSentence = facts.reference ? "Réf. " + facts.reference + "." : "";
+  const highlights = facts.highlights.map((x) => "• " + x);
+  const priceLine = facts.price ? "💶 " + facts.price : "";
 
-  return {
-    facebook: [
-      "🏠 " + (headline || "Nouveau bien à découvrir.") + ".",
-      detailSentence, highlightsSentence, refSentence,
-      "Pour organiser une visite, contactez-moi."
-    ].filter(Boolean).join("\n\n"),
-    instagram: [
-      "🏠 " + (headline || "Nouveau bien à découvrir.") + ".",
-      detailSentence, highlightsSentence, refSentence,
-      "#immobilier #Ardennes #CharlevilleMezieres #JMLImmobilier"
-    ].filter(Boolean).join("\n\n"),
-    linkedin: [
-      "Nouvelle annonce JML Immobilier : " + (headline || "bien immobilier") + ".",
-      detailSentence, highlightsSentence, refSentence,
-      "Informations présentées à partir des données de l'annonce source."
-    ].filter(Boolean).join("\n\n")
-  };
+  const facebook = [
+    "🏡 " + (facts.type || "Nouveau bien") + location,
+    "",
+    priceLine + (reference ? "  ·  " + reference : ""),
+    specs.length ? specs.join("  ·  ") : "",
+    "",
+    highlights.length ? "✨ Les points forts\n" + highlights.join("\n") : "",
+    "",
+    "Vous souhaitez découvrir ce bien ? Contactez-moi pour organiser une visite."
+  ].filter((line, i, arr) => line !== "" || (i > 0 && i < arr.length - 1))
+   .join("\n");
+
+  const instagram = [
+    "🏡 " + (facts.type || "Nouveau bien") + location,
+    priceLine + (reference ? "  ·  " + reference : ""),
+    specs.length ? specs.join("  ·  ") : "",
+    "",
+    highlights.length ? "✨ " + facts.highlights.join(" • ") : "",
+    "",
+    "📩 Infos & visites sur demande.",
+    "",
+    "#JMLImmobilier #ImmobilierArdennes #CharlevilleMezieres #Ardennes #AchatImmobilier"
+  ].filter(Boolean).join("\n");
+
+  const linkedin = [
+    "🏠 Nouvelle opportunité immobilière" + location,
+    "",
+    (facts.type || "Bien immobilier") + ".",
+    priceLine + (reference ? "  ·  " + reference : ""),
+    specs.length ? specs.join("  ·  ") : "",
+    "",
+    highlights.length ? "Points clés :\n" + highlights.join("\n") : "",
+    "",
+    "Les informations présentées correspondent aux données vérifiées de l'annonce source."
+  ].filter(Boolean).join("\n");
+
+  return { facebook, instagram, linkedin };
 }
 
 function extractHighlights(bodyText) {
