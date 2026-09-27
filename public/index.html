@@ -59,7 +59,7 @@
   <header>
     <div class="wrap">
       <div class="brand">JML Immobilier</div>
-      <div class="tagline">Annonces Auto — génération de publications à partir des vraies annonces JML · v0.7.0</div>
+      <div class="tagline">Annonces Auto — génération de publications à partir des vraies annonces JML · v0.8.0</div>
     </div>
   </header>
 
@@ -809,6 +809,10 @@ document.querySelectorAll(".connectSocial").forEach(button => {
 });
 $("refreshAccounts").addEventListener("click", loadSocialAccounts);
 loadSocialAccounts();
+if (new URLSearchParams(location.search).get("social") === "connected") {
+  $("accountsStatus").textContent = "🟢 Compte social connecté. Tu gardes la validation finale de chaque publication.";
+  history.replaceState({}, "", location.pathname);
+}
 
 function currentListingUrl() {
   return $("url").value.trim();
