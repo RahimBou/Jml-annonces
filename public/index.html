@@ -87,14 +87,14 @@
             <div class="fact">Chambres<b id="bedrooms">—</b></div>
             <div class="fact">Pièces<b id="rooms">—</b></div>
           </div>
-          <div class="actions"><button id="generate">Générer le visuel JML</button></div>
+          <div class="actions" style="display:flex;gap:10px;flex-wrap:wrap"><button id="generate">Générer le visuel JML</button><button id="generateAI" style="background:#b28b3f">✨ Générer avec ChatGPT</button></div>
         </div>
         <div>
           <h2>Photos originales récupérées</h2>
           <div id="photos" class="photos"></div>
           <div id="photoStatus" class="photo-status"></div>
           <div id="photoWarning" class="photo-warning"></div>
-          <div id="photoMeta" class="photo-meta"></div>
+          <div id="photoMeta" class="photo-meta"></div><div id="aiStatus" class="photo-meta" style="margin-top:10px;font-weight:700"></div>
         </div>
       </div>
     </section>
@@ -156,7 +156,8 @@ async function renderJmlTemplate() {
   ctx.fillStyle = CREAM;
   ctx.fillRect(0,0,W,H);
 
-  const sourceUrls = (p.images || []).slice(0, 7);
+  const aiOrder = Array.isArray(p.aiPlan?.photoOrder) ? p.aiPlan.photoOrder : (p.images || []).map((_,i)=>i);
+  const sourceUrls = aiOrder.map(i => p.images?.[i]).filter(Boolean).slice(0, 7);
   const loaded = await Promise.all(sourceUrls.map(loadCanvasImage));
   const photos = loaded.filter(Boolean);
   if (!photos.length) return;
@@ -279,7 +280,7 @@ async function renderJmlTemplate() {
   ctx.fillStyle=GREEN;
   ctx.fillRect(0,HIGHLIGHTS_Y,W,HIGHLIGHTS_H);
 
-  const highlights=(p.highlights && p.highlights.length ? p.highlights : ["Informations de l'annonce"]).slice(0,6);
+  const highlights=(p.aiPlan?.highlights?.length ? p.aiPlan.highlights : (p.highlights && p.highlights.length ? p.highlights : ["Informations de l'annonce"])).slice(0,6);
   const columns=6;
   const colW=W/columns;
 
@@ -463,6 +464,39 @@ $("generate").addEventListener("click", async () => {
   }
   await renderJmlTemplate();
   $("visualSection").scrollIntoView({ behavior: "smooth", block: "start" });
+});
+
+
+$("generateAI").addEventListener("click", async () => {
+  if (!currentData) return;
+  if (currentData.photoPolicy?.publishAllowedForPhotoTest !== true) {
+    alert("La galerie doit être complète et vérifiée avant d'utiliser ChatGPT.");
+    return;
+  }
+
+  const button = $("generateAI");
+  const status = $("aiStatus");
+  button.disabled = true;
+  status.textContent = "✨ ChatGPT analyse l'annonce et sélectionne les éléments à mettre en avant…";
+
+  try {
+    const response = await fetch("/api/ai-layout", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ listing: currentData.listing })
+    });
+    const data = await response.json();
+    if (!response.ok || !data.ok) throw new Error(data.error || "ChatGPT n'est pas disponible.");
+
+    currentData.listing.aiPlan = data.plan;
+    status.textContent = "🟢 ChatGPT a préparé le contenu. Les photos restent 100 % originales.";
+    await renderJmlTemplate();
+    $("visualSection").scrollIntoView({ behavior: "smooth", block: "start" });
+  } catch (error) {
+    status.textContent = "🔴 " + error.message;
+  } finally {
+    button.disabled = false;
+  }
 });
 
 $("download").addEventListener("click", () => {
