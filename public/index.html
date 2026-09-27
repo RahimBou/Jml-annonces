@@ -135,105 +135,216 @@ function loadCanvasImage(src) {
 
 async function renderJmlTemplate() {
   if (!currentData) return;
+
   const p = currentData.listing;
   const canvas = $("visual");
   const ctx = canvas.getContext("2d");
-  const green = "#073b2a", gold = "#c8a24d";
-  ctx.clearRect(0, 0, 1200, 1200);
-  ctx.fillStyle = "#f7f4ec";
-  ctx.fillRect(0, 0, 1200, 1200);
+  const W = 1200, H = 1200;
+  const GREEN = "#063b2a", GOLD = "#c7a24d", CREAM = "#f7f4ea", WHITE = "#ffffff", INK = "#151515";
 
-  const images = await Promise.all((p.images || []).map(loadCanvasImage));
-  const valid = images.filter(Boolean);
-  if (!valid.length) return;
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle = CREAM;
+  ctx.fillRect(0,0,W,H);
 
-  cropCanvasImage(ctx, valid[0], 0, 0, 1200, 455);
+  const sourceUrls = (p.images || []).slice(0, 7);
+  const loaded = await Promise.all(sourceUrls.map(loadCanvasImage));
+  const photos = loaded.filter(Boolean);
+  if (!photos.length) return;
 
-  // JML branding block.
-  const brand = ctx.createLinearGradient(0, 0, 520, 0);
-  brand.addColorStop(0, "rgba(255,255,255,.96)");
-  brand.addColorStop(1, "rgba(255,255,255,.02)");
-  ctx.fillStyle = brand; ctx.fillRect(0, 0, 520, 170);
-  ctx.fillStyle = green; ctx.font = "bold 44px Georgia"; ctx.fillText("JML", 38, 62);
-  ctx.fillStyle = gold; ctx.font = "bold 44px Georgia"; ctx.fillText(" IMMOBILIER", 108, 62);
-  ctx.fillStyle = "#555"; ctx.font = "16px Arial"; ctx.fillText("VOTRE PROJET, NOTRE ENGAGEMENT", 40, 98);
+  // Exact reference geometry: hero 468 px, gallery 422 px, stats 105 px,
+  // green highlights 105 px, contact footer 100 px.
+  const HERO_H = 468;
+  const GALLERY_Y = 472;
+  const GALLERY_H = 416;
+  const STATS_Y = 892;
+  const STATS_H = 102;
+  const HIGHLIGHTS_Y = 994;
+  const HIGHLIGHTS_H = 104;
+  const FOOTER_Y = 1098;
+  const FOOTER_H = 102;
 
-  // Sale/location badge.
-  ctx.fillStyle = green;
-  ctx.beginPath(); ctx.moveTo(780,0); ctx.lineTo(1200,0); ctx.lineTo(1200,225); ctx.lineTo(875,225); ctx.lineTo(780,140); ctx.closePath(); ctx.fill();
-  ctx.fillStyle = gold; ctx.font = "bold 52px Georgia"; ctx.textAlign = "center"; ctx.fillText("À VENDRE", 995, 62);
-  ctx.fillStyle = gold; ctx.fillRect(900, 80, 240, 46);
-  ctx.fillStyle = "#111"; ctx.font = "bold 23px Arial"; ctx.fillText(propertyType(p.title), 1020, 111);
-  ctx.fillStyle = "#fff"; ctx.font = "bold 19px Arial";
-  fitCanvasText(ctx, String(p.location || "").toUpperCase(), 990, 164, 370, "bold 19px Arial");
-  ctx.font = "17px Arial";
-  const postal = String(p.location || "").match(/\((\d{5})\)/);
-  ctx.fillText(postal ? postal[1] : "", 990, 190);
+  // HERO
+  cropCanvasImage(ctx, photos[0], 0, 0, W, HERO_H);
 
-  // Price badge.
-  ctx.fillStyle = "#f1d38a";
-  ctx.fillRect(875, 338, 325, 117);
-  ctx.fillStyle = "#111"; ctx.font = "bold 46px Georgia"; ctx.fillText(p.price || "", 1037, 386);
-  ctx.font = "23px Georgia"; ctx.fillText("Réf. " + (p.reference || "—"), 1037, 424);
-  ctx.textAlign = "left";
+  // Soft white brand area, matching the reference.
+  const brand = ctx.createLinearGradient(0,0,460,0);
+  brand.addColorStop(0,"rgba(255,255,255,.98)");
+  brand.addColorStop(1,"rgba(255,255,255,.05)");
+  ctx.fillStyle = brand;
+  ctx.fillRect(0,0,475,175);
 
-  // Photo mosaic: one hero + two large + remaining originals.
-  const rest = valid.slice(1);
-  if (rest[0]) cropCanvasImage(ctx, rest[0], 0, 463, 600, 235);
-  if (rest[1]) cropCanvasImage(ctx, rest[1], 608, 463, 592, 235);
-  const small = rest.slice(2);
-  if (small.length) {
-    const cols = Math.min(5, small.length), gap = 8, y = 706, h = 169;
-    const w = (1200 - gap * (cols - 1)) / cols;
-    small.forEach((img, i) => cropCanvasImage(ctx, img, i * (w + gap), y, w, h));
+  // Actual JML logo when available; otherwise clean text fallback.
+  if (p.logoUrl) {
+    const logo = await loadCanvasImage(p.logoUrl);
+    if (logo) {
+      const scale = Math.min(390/logo.naturalWidth,145/logo.naturalHeight);
+      ctx.drawImage(logo,35,14,logo.naturalWidth*scale,logo.naturalHeight*scale);
+    }
+  } else {
+    ctx.fillStyle = GREEN;
+    ctx.font = "bold 48px Georgia";
+    ctx.fillText("JML",35,66);
+    ctx.fillStyle = GOLD;
+    ctx.font = "bold 46px Georgia";
+    ctx.fillText(" IMMOBILIER",115,66);
+    ctx.fillStyle = "#555";
+    ctx.font = "15px Arial";
+    ctx.fillText("VOTRE PROJET, NOTRE ENGAGEMENT",38,102);
   }
 
-  // Main facts strip.
-  const statsY = small.length ? 875 : 706;
-  ctx.fillStyle = "#fff"; ctx.fillRect(0, statsY, 1200, 105);
-  const stats = [
-    ["⌂", p.surface || "—", "m² habitables"],
-    ["♧", p.terrain || "—", "Terrain"],
-    ["▣", String(p.bedrooms == null ? "—" : p.bedrooms), "chambres"],
-    ["▰", String(p.rooms == null ? "—" : p.rooms), "pièces"],
-    ["▤", /garage/i.test(p.description || "") ? "1" : "—", "garage"]
-  ];
-  const sw = 1200 / stats.length;
-  stats.forEach((item, i) => {
-    const x = i * sw + 28;
-    ctx.fillStyle = gold; ctx.beginPath(); ctx.arc(x + 22, statsY + 52, 28, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = "#fff"; ctx.font = "25px Arial"; ctx.textAlign = "center"; ctx.fillText(item[0], x + 22, statsY + 61);
-    ctx.textAlign = "left"; ctx.fillStyle = "#111"; ctx.font = "bold 22px Georgia"; ctx.fillText(item[1], x + 62, statsY + 48);
-    ctx.font = "15px Arial"; ctx.fillText(item[2], x + 62, statsY + 70);
-  });
+  // TOP RIGHT GREEN/GOLD folded badge.
+  ctx.fillStyle = GREEN;
+  ctx.beginPath();
+  ctx.moveTo(790,0); ctx.lineTo(1200,0); ctx.lineTo(1200,235);
+  ctx.lineTo(910,235); ctx.lineTo(790,105); ctx.closePath(); ctx.fill();
 
-  // Highlights strip.
-  const hy = statsY + 105;
-  ctx.fillStyle = green; ctx.fillRect(0, hy, 1200, 125);
-  const highlights = (p.highlights && p.highlights.length ? p.highlights : ["Informations de l'annonce"]).slice(0, 6);
-  const hw = 1200 / highlights.length;
-  highlights.forEach((item, i) => {
-    const x = i * hw + 16;
-    ctx.fillStyle = gold; ctx.font = "24px Arial"; ctx.fillText("◆", x, hy + 50);
-    ctx.fillStyle = "#fff"; fitCanvasText(ctx, item, x + 34, hy + 46, hw - 45, "bold 16px Arial");
-  });
+  ctx.fillStyle = GOLD;
+  ctx.font = "bold 52px Georgia";
+  ctx.textAlign = "center";
+  ctx.fillText("À VENDRE",995,62);
 
-  // Contact footer.
-  const fy = hy + 125;
-  ctx.fillStyle = "#fff"; ctx.fillRect(0, fy, 1200, 120);
-  ctx.fillStyle = gold; ctx.beginPath(); ctx.arc(70, fy + 60, 39, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = "#fff"; ctx.font = "32px Arial"; ctx.textAlign = "center"; ctx.fillText("☎", 70, fy + 70);
-  ctx.textAlign = "left"; ctx.fillStyle = "#222"; ctx.font = "18px Georgia"; ctx.fillText("Une visite ? Contactez-moi", 130, fy + 40);
-  ctx.font = "bold 33px Georgia"; ctx.fillText("06 26 93 50 41", 130, fy + 82);
-  ctx.fillStyle = gold; ctx.fillRect(510, fy + 20, 2, 80);
-  ctx.fillStyle = "#b18c3f"; ctx.font = "bold 21px Georgia"; ctx.fillText("Abderrahim Boujnikh", 550, fy + 42);
-  ctx.fillStyle = "#333"; ctx.font = "18px Georgia"; ctx.fillText("Agent commercial indépendant", 550, fy + 68);
-  ctx.fillText("Réseau JML Immobilier", 550, fy + 92);
-  ctx.fillStyle = green; ctx.font = "bold 25px Georgia"; ctx.fillText("JML IMMOBILIER", 945, fy + 55);
-  ctx.fillStyle = "#777"; ctx.font = "11px Arial"; ctx.fillText("VOTRE PROJET, NOTRE ENGAGEMENT", 945, fy + 75);
+  ctx.fillStyle = GOLD;
+  ctx.beginPath(); ctx.roundRect(900,82,245,48,24); ctx.fill();
+  ctx.fillStyle = INK;
+  ctx.font = "bold 23px Arial";
+  ctx.fillText(propertyType(p.title),1022,113);
+
+  ctx.fillStyle = WHITE;
+  ctx.font = "bold 19px Arial";
+  fitCanvasText(ctx,String(p.location || "").toUpperCase(),995,168,370,"bold 19px Arial");
+  const postal = String(p.location || "").match(/\((\d{5})\)/);
+  ctx.font = "17px Arial";
+  ctx.fillText(postal ? postal[1] : "",995,198);
+
+  // PRICE GOLD PANEL.
+  ctx.fillStyle = "#f1d58d";
+  ctx.beginPath();
+  ctx.moveTo(925,339); ctx.lineTo(1200,339); ctx.lineTo(1200,468); ctx.lineTo(875,468);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = INK;
+  ctx.font = "bold 47px Georgia";
+  ctx.fillText(p.price || "Prix",1037,402);
+  ctx.font = "24px Georgia";
+  ctx.fillText("Réf. " + (p.reference || "—"),1037,442);
   ctx.textAlign = "left";
 
-  $("visualSection").style.display = "block";
+  // GALLERY: exactly the same 2 + 4 mosaic structure as the reference.
+  // We use only verified original photos.
+  const gap = 5;
+  const galleryPhotos = photos.slice(1,7);
+  if (galleryPhotos[0]) cropCanvasImage(ctx,galleryPhotos[0],0,GALLERY_Y,595,230);
+  if (galleryPhotos[1]) cropCanvasImage(ctx,galleryPhotos[1],600,GALLERY_Y,600,230);
+
+  const smallY = GALLERY_Y + 235;
+  const smallW = (W - gap*3) / 4;
+  for (let i=0;i<4;i++) {
+    const img = galleryPhotos[i+2];
+    if (img) cropCanvasImage(ctx,img,i*(smallW+gap),smallY,smallW,181);
+  }
+
+  // STATS — five columns exactly like the reference.
+  ctx.fillStyle = WHITE;
+  ctx.fillRect(0,STATS_Y,W,STATS_H);
+
+  const stats = [
+    ["⌂",p.surface || "—","habitables"],
+    ["♧",p.terrain || "—","Terrain"],
+    ["▣",String(p.bedrooms ?? "—"),"chambres"],
+    ["▰",String(p.rooms ?? "—"),"pièces"],
+    ["▤",/garage/i.test(p.description || "") ? "1" : "—","garage"]
+  ];
+  const statW = W/5;
+
+  stats.forEach((item,i)=>{
+    const left=i*statW;
+    if(i>0){
+      ctx.strokeStyle="#cfc9bb"; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(left,STATS_Y+18); ctx.lineTo(left,STATS_Y+84); ctx.stroke();
+    }
+
+    ctx.fillStyle=GOLD;
+    ctx.beginPath(); ctx.arc(left+48,STATS_Y+52,30,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle=WHITE;
+    ctx.font="27px Arial"; ctx.textAlign="center"; ctx.textBaseline="middle";
+    ctx.fillText(item[0],left+48,STATS_Y+53);
+
+    ctx.textAlign="left"; ctx.textBaseline="alphabetic";
+    ctx.fillStyle=INK;
+    ctx.font="bold 24px Georgia";
+    ctx.fillText(item[1],left+94,STATS_Y+49);
+    ctx.font="15px Georgia";
+    ctx.fillText(item[2],left+94,STATS_Y+70);
+  });
+
+  // GREEN HIGHLIGHTS BAND — six columns exactly like the reference.
+  ctx.fillStyle=GREEN;
+  ctx.fillRect(0,HIGHLIGHTS_Y,W,HIGHLIGHTS_H);
+
+  const highlights=(p.highlights && p.highlights.length ? p.highlights : ["Informations de l'annonce"]).slice(0,6);
+  const columns=Math.max(1,highlights.length);
+  const colW=W/columns;
+
+  highlights.forEach((item,i)=>{
+    const x=i*colW;
+    if(i>0){
+      ctx.strokeStyle="rgba(255,255,255,.7)";
+      ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(x,HIGHLIGHTS_Y+12); ctx.lineTo(x,HIGHLIGHTS_Y+92); ctx.stroke();
+    }
+    ctx.fillStyle=GOLD;
+    ctx.font="30px Arial";
+    ctx.textAlign="center";
+    ctx.fillText("◆",x+34,HIGHLIGHTS_Y+53);
+    ctx.textAlign="left";
+    ctx.fillStyle=WHITE;
+    fitCanvasText(ctx,item,x+58,HIGHLIGHTS_Y+49,colW-70,"bold 15px Georgia");
+  });
+
+  // CONTACT FOOTER — fixed bottom area.
+  ctx.fillStyle=WHITE;
+  ctx.fillRect(0,FOOTER_Y,W,FOOTER_H);
+
+  ctx.fillStyle=GOLD;
+  ctx.beginPath(); ctx.arc(70,FOOTER_Y+51,38,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle=WHITE;
+  ctx.font="32px Arial"; ctx.textAlign="center"; ctx.textBaseline="middle";
+  ctx.fillText("☎",70,FOOTER_Y+52);
+
+  ctx.textAlign="left"; ctx.textBaseline="alphabetic";
+  ctx.fillStyle=INK;
+  ctx.font="18px Georgia";
+  ctx.fillText("Une visite ? Contactez-moi",132,FOOTER_Y+38);
+  ctx.font="bold 34px Georgia";
+  ctx.fillText("06 26 93 50 41",132,FOOTER_Y+76);
+
+  ctx.fillStyle=GOLD;
+  ctx.fillRect(510,FOOTER_Y+17,2,68);
+
+  ctx.fillStyle="#a9853c";
+  ctx.font="bold 21px Georgia";
+  ctx.fillText("Abderrahim Boujnikh",552,FOOTER_Y+35);
+  ctx.fillStyle="#333";
+  ctx.font="17px Georgia";
+  ctx.fillText("Agent commercial indépendant",552,FOOTER_Y+58);
+  ctx.fillText("Réseau JML Immobilier",552,FOOTER_Y+80);
+
+  // Bottom right logo / brand.
+  if (p.logoUrl) {
+    const logo = await loadCanvasImage(p.logoUrl);
+    if (logo) {
+      const scale=Math.min(220/logo.naturalWidth,70/logo.naturalHeight);
+      ctx.drawImage(logo,945,FOOTER_Y+16,logo.naturalWidth*scale,logo.naturalHeight*scale);
+    }
+  } else {
+    ctx.fillStyle=GREEN;
+    ctx.font="bold 25px Georgia";
+    ctx.fillText("JML IMMOBILIER",945,FOOTER_Y+45);
+    ctx.fillStyle="#777";
+    ctx.font="11px Arial";
+    ctx.fillText("VOTRE PROJET, NOTRE ENGAGEMENT",945,FOOTER_Y+66);
+  }
+
+  $("visualSection").style.display="block";
 }
 
 $("load").addEventListener("click", async () => {
