@@ -1135,18 +1135,115 @@ app.post("/api/ai-layout", async (req, res) => {
         if (response?.ok) break;
       }
 
-      if (!response?.ok) {
+      if (!response?.ok && process.env.OPENROUTER_API_KEY) {
+        // Gemini exhausted: use OpenRouter free router for the visual plan.
+        // The original verified photos are passed as image inputs; OpenRouter
+        // only chooses/order them and writes factual copy. It never creates photos.
+        const openRouterContent = [
+          {
+            type: "text",
+            text:
+              prompt +
+              "\n\nDONNÉES DE L'ANNONCE:\n" +
+              JSON.stringify(facts) +
+              "\n\nLes images jointes sont les photos originales vérifiées. " +
+              "Utilise uniquement leur index 0-based pour photoOrder."
+          }
+        ];
+
+        for (const part of parts) {
+          if (part.text) {
+            openRouterContent.push({ type: "text", text: part.text });
+          } else if (part.inline_data?.data) {
+            openRouterContent.push({
+              type: "image_url",
+              image_url: {
+                url:
+                  "data:" +
+                  (part.inline_data.mime_type || "image/jpeg") +
+                  ";base64," +
+                  part.inline_data.data
+              }
+            });
+          }
+        }
+
+        try {
+          const openRouterResponse = await fetch(
+            "https://openrouter.ai/api/v1/chat/completions",
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": "Bearer " + process.env.OPENROUTER_API_KEY,
+                "HTTP-Referer": appBaseUrl(req),
+                "X-Title": "JML Annonces"
+              },
+              body: JSON.stringify({
+                model: "openrouter/free",
+                messages: [
+                  {
+                    role: "system",
+                    content:
+                      "Tu produis des données JSON strictes pour une application immobilière. " +
+                      "Aucun fait ne doit être inventé. Les photos doivent uniquement être " +
+                      "sélectionnées et ordonnées, jamais générées."
+                  },
+                  { role: "user", content: openRouterContent }
+                ],
+                response_format: {
+                  type: "json_schema",
+                  json_schema: {
+                    name: "jml_visual_plan",
+                    strict: true,
+                    schema
+                  }
+                },
+                temperature: 0.2,
+                max_tokens: 900
+              })
+            }
+          );
+
+          const openRouterPayload = await openRouterResponse.json();
+          const openRouterRaw =
+            openRouterPayload?.choices?.[0]?.message?.content || "";
+
+          if (openRouterResponse.ok && openRouterRaw) {
+            try {
+              plan = JSON.parse(openRouterRaw);
+              provider = "openrouter";
+              model = "openrouter/free";
+            } catch {}
+          }
+        } catch {}
+      }
+
+      if (!plan && !response?.ok) {
+        // Last-resort deterministic plan: preserve the original photos and
+        // verified factual highlights rather than blocking the visual.
+        plan = {
+          title: listing.title || "Bien immobilier",
+          subtitle: listing.location || "",
+          highlights: (listing.highlights || []).slice(0, 6),
+          photoOrder: listing.images.map((_, i) => i)
+        };
+        provider = "deterministic";
+        model = "local-fallback";
+      }
+
+      if (!plan) {
         return res.status(502).json({
           ok: false,
           error:
-            "Gemini indisponible temporairement (" +
-            model +
-            "). Les modèles Gemini de secours ont également échoué. " +
+            "Aucun moteur IA disponible pour préparer le visuel. " +
             (payload?.error?.message || "Réessayez dans quelques instants.")
         });
       }
 
-      model = successfulModel;
+      if (provider === "gemini") {
+        model = successfulModel;
+      }
 
       const raw =
         payload?.candidates?.[0]?.content?.parts
