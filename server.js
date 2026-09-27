@@ -313,7 +313,7 @@ app.post("/api/social/publish/facebook", async (req, res) => {
       return res.status(400).json({ ok:false, error:"Visuel JML manquant." });
     }
 
-    const match = imageData.match(/^data:(image\\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+    const match = imageData.match(/^data:(image\/[^;]+);base64,(.+)$/);
     if (!match) return res.status(400).json({ ok:false, error:"Format du visuel invalide." });
 
     const buffer = Buffer.from(match[2], "base64");
@@ -321,16 +321,41 @@ app.post("/api/social/publish/facebook", async (req, res) => {
       return res.status(413).json({ ok:false, error:"Le visuel est trop volumineux." });
     }
 
-    const form = new FormData();
-    form.append("source", new Blob([buffer], { type: match[1] }), "JML-annonce.png");
-    form.append("caption", message);
-    form.append("published", "true");
-    form.append("access_token", account.accessToken);
+    // Build multipart/form-data manually so publication works consistently on
+    // Render without depending on a particular Node multipart implementation.
+    const boundary = "----JMLFormBoundary" + crypto.randomBytes(12).toString("hex");
+    const chunks = [];
+    const addField = (name, value) => {
+      chunks.push(Buffer.from(
+        "--" + boundary + "\r\n" +
+        'Content-Disposition: form-data; name="' + name + '"\r\n\r\n' +
+        String(value) + "\r\n"
+      ));
+    };
+    chunks.push(Buffer.from(
+      "--" + boundary + "\r\n" +
+      'Content-Disposition: form-data; name="source"; filename="JML-annonce.png"\r\n' +
+      "Content-Type: " + match[1] + "\r\n\r\n"
+    ));
+    chunks.push(buffer);
+    chunks.push(Buffer.from("\r\n"));
+    addField("caption", message);
+    addField("published", "true");
+    addField("access_token", account.accessToken);
+    chunks.push(Buffer.from("--" + boundary + "--\r\n"));
 
+    const body = Buffer.concat(chunks);
     const graphVersion = process.env.META_GRAPH_VERSION || "v23.0";
     const graphResponse = await fetch(
       "https://graph.facebook.com/" + graphVersion + "/" + encodeURIComponent(account.pageId) + "/photos",
-      { method:"POST", body:form }
+      {
+        method:"POST",
+        headers:{
+          "Content-Type":"multipart/form-data; boundary=" + boundary,
+          "Content-Length":String(body.length)
+        },
+        body
+      }
     );
     const payload = await graphResponse.json();
 
