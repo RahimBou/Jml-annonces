@@ -428,15 +428,15 @@ async function renderJmlTemplate() {
     findStat("garage", "▤", garageCount, "garage" + (garageCount === "1" ? "" : "s")),
     findStat("living", "▥", livingArea, "séjour"),
     sourceHighlights.includes("Terrasse") || approvedHighlights.includes("Terrasse")
-      ? ["▰", "Oui", "terrasse"] : null,
+      ? ["▰", "Terrasse", ""] : null,
     sourceHighlights.includes("Cave") || approvedHighlights.includes("Cave")
-      ? ["▤", "Oui", "cave"] : null,
+      ? ["▤", "Cave", "annexe"] : null,
     sourceHighlights.includes("Parking") || approvedHighlights.includes("Parking")
-      ? ["▤", "Oui", "parking"] : null,
+      ? ["▤", "Parking", ""] : null,
     sourceHighlights.includes("Salle de bains") || approvedHighlights.includes("Salle de bains")
-      ? ["▥", "Oui", "salle de bains"] : null,
+      ? ["▥", "Salle de bains", ""] : null,
     sourceHighlights.includes("Piscinable") || approvedHighlights.includes("Piscinable")
-      ? ["◇", "Oui", "piscinable"] : null
+      ? ["◇", "Piscinable", ""] : null
   ].filter(Boolean);
 
   const stats = [];
