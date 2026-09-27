@@ -120,11 +120,45 @@ function propertyType(title) {
   return m ? m[1].toUpperCase() : "BIEN IMMOBILIER";
 }
 
-function fitCanvasText(ctx, text, x, y, maxWidth, font) {
-  ctx.font = font;
-  let value = String(text || "");
-  while (value.length > 2 && ctx.measureText(value + "...").width > maxWidth) value = value.slice(0, -1);
-  ctx.fillText(value + (value !== String(text || "") ? "..." : ""), x, y);
+function fitCanvasText(ctx, text, x, y, maxWidth, font, minPx = 10) {
+  const base = String(font || "16px Georgia");
+  const match = base.match(/(\\d+(?:\\.\\d+)?)px/);
+  const basePx = match ? Number(match[1]) : 16;
+  let size = basePx;
+  while (size > minPx) {
+    ctx.font = base.replace(/\\d+(?:\\.\\d+)?px/, size + "px");
+    if (ctx.measureText(String(text || "")).width <= maxWidth) break;
+    size -= 0.5;
+  }
+  ctx.fillText(String(text || ""), x, y);
+}
+
+function drawTwoLineFit(ctx, text, x, y, maxWidth, maxSize = 14, minSize = 10) {
+  const value = String(text || "").trim();
+  if (!value) return;
+  const words = value.split(/\\s+/);
+  let line1 = "", line2 = "";
+  for (const word of words) {
+    const candidate = line1 ? line1 + " " + word : word;
+    if (ctx.measureText(candidate).width <= maxWidth || !line1) line1 = candidate;
+    else line2 = line2 ? line2 + " " + word : word;
+  }
+  if (!line2 && ctx.measureText(line1).width <= maxWidth) {
+    fitCanvasText(ctx, line1, x, y, maxWidth, "bold " + maxSize + "px Georgia", minSize);
+    return;
+  }
+  if (line2 && ctx.measureText(line2).width > maxWidth) {
+    let size = maxSize;
+    while (size > minSize) {
+      ctx.font = "bold " + size + "px Georgia";
+      if (ctx.measureText(line1).width <= maxWidth && ctx.measureText(line2).width <= maxWidth) break;
+      size -= 0.5;
+    }
+  } else {
+    ctx.font = "bold " + maxSize + "px Georgia";
+  }
+  ctx.fillText(line1, x, y - 8);
+  if (line2) ctx.fillText(line2, x, y + 12);
 }
 
 function cropCanvasImage(ctx, img, x, y, w, h) {
@@ -150,7 +184,7 @@ async function renderJmlTemplate() {
   const canvas = $("visual");
   const ctx = canvas.getContext("2d");
   const W = 1200, H = 1200;
-  const GREEN = "#063b2a", GOLD = "#c7a24d", CREAM = "#f7f4ea", WHITE = "#ffffff", INK = "#151515";
+  const GREEN = "#012517", GOLD = "#d0a64b", CREAM = "#fbfaf5", WHITE = "#ffffff", INK = "#151515";
 
   ctx.clearRect(0,0,W,H);
   ctx.fillStyle = CREAM;
@@ -217,7 +251,7 @@ async function renderJmlTemplate() {
   ctx.fillText(postal ? postal[1] : "",995,198);
 
   // PRICE GOLD PANEL.
-  ctx.fillStyle = "#f1d58d";
+  ctx.fillStyle = GOLD;
   ctx.beginPath();
   ctx.moveTo(925,339); ctx.lineTo(1200,339); ctx.lineTo(1200,468); ctx.lineTo(875,468);
   ctx.closePath(); ctx.fill();
@@ -270,10 +304,8 @@ async function renderJmlTemplate() {
 
     ctx.textAlign="left"; ctx.textBaseline="alphabetic";
     ctx.fillStyle=INK;
-    ctx.font="bold 24px Georgia";
-    ctx.fillText(item[1],left+94,STATS_Y+49);
-    ctx.font="15px Georgia";
-    ctx.fillText(item[2],left+94,STATS_Y+70);
+    fitCanvasText(ctx,item[1],left+94,STATS_Y+49,statW-105,"bold 24px Georgia",14);
+    fitCanvasText(ctx,item[2],left+94,STATS_Y+70,statW-105,"15px Georgia",11);
   });
 
   // GREEN HIGHLIGHTS BAND — six columns exactly like the reference.
@@ -297,7 +329,8 @@ async function renderJmlTemplate() {
     ctx.fillText("◆",x+34,HIGHLIGHTS_Y+53);
     ctx.textAlign="left";
     ctx.fillStyle=WHITE;
-    fitCanvasText(ctx,item,x+58,HIGHLIGHTS_Y+43,colW-70,"bold 14px Georgia");
+    ctx.font = "bold 14px Georgia";
+    drawTwoLineFit(ctx,item,x+58,HIGHLIGHTS_Y+43,colW-72,14,10);
   });
 
   // CONTACT FOOTER — fixed bottom area.
@@ -320,10 +353,10 @@ async function renderJmlTemplate() {
   ctx.fillStyle=GOLD;
   ctx.fillRect(510,FOOTER_Y+17,2,68);
 
-  ctx.fillStyle="#a9853c";
+  ctx.fillStyle=GOLD;
   ctx.font="bold 21px Georgia";
   ctx.fillText("Abderrahim Boujnikh",552,FOOTER_Y+35);
-  ctx.fillStyle="#333";
+  ctx.fillStyle=INK;
   ctx.font="17px Georgia";
   ctx.fillText("Agent commercial indépendant",552,FOOTER_Y+58);
   ctx.fillText("Réseau JML Immobilier",552,FOOTER_Y+80);
