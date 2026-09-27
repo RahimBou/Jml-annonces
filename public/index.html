@@ -100,6 +100,16 @@
     </section>
   </main>
 
+  <section id="visualSection" class="card" style="display:none;margin-top:20px">
+    <div class="visual-actions" style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px">
+      <h2 style="margin:0;color:var(--green)">Visuel JML généré</h2>
+      <button id="download" class="secondary">Exporter le visuel PNG</button>
+    </div>
+    <div class="canvas-wrap" style="background:#e9e5da;padding:14px;border-radius:16px;overflow:auto;text-align:center">
+      <canvas id="visual" width="1200" height="1200" style="width:min(100%,900px);height:auto;display:block;margin:auto;box-shadow:0 8px 30px rgba(0,0,0,.16)"></canvas>
+    </div>
+  </section>
+
 <script>
 const $ = (id) => document.getElementById(id);
 let currentData = null;
