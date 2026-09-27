@@ -771,38 +771,6 @@ app.post("/api/ai-layout", async (req, res) => {
         } catch {}
       }
 
-      const response = await fetch(
-        "https://generativelanguage.googleapis.com/v1beta/models/" +
-          encodeURIComponent(model) +
-          ":generateContent",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-goog-api-key": geminiKey
-          },
-          body: JSON.stringify({
-            contents: [
-              {
-                role: "user",
-                parts
-              }
-            ],
-            generationConfig: {
-              responseFormat: {
-                text: {
-                  mimeType: "APPLICATION_JSON",
-                  schema
-                }
-              },
-              thinkingConfig: {
-                thinkingLevel: "low"
-              }
-            }
-          })
-        }
-      );
-
       let payload = null;
       let response = null;
       let successfulModel = model;
