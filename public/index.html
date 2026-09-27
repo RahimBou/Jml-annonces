@@ -87,6 +87,7 @@
             <div class="fact">Chambres<b id="bedrooms">—</b></div>
             <div class="fact">Pièces<b id="rooms">—</b></div>
           </div>
+          <div class="actions"><button id="generate">Générer le visuel JML</button></div>
         </div>
         <div>
           <h2>Photos originales récupérées</h2>
@@ -101,6 +102,139 @@
 
 <script>
 const $ = (id) => document.getElementById(id);
+let currentData = null;
+
+
+function propertyType(title) {
+  const m = String(title || "").match(/^(Appartement|Maison|Pavillon|Terrain|Garage|Immeuble|Local commercial|Local|Studio|Duplex|Loft)/i);
+  return m ? m[1].toUpperCase() : "BIEN IMMOBILIER";
+}
+
+function fitCanvasText(ctx, text, x, y, maxWidth, font) {
+  ctx.font = font;
+  let value = String(text || "");
+  while (value.length > 2 && ctx.measureText(value + "...").width > maxWidth) value = value.slice(0, -1);
+  ctx.fillText(value + (value !== String(text || "") ? "..." : ""), x, y);
+}
+
+function cropCanvasImage(ctx, img, x, y, w, h) {
+  const scale = Math.max(w / img.naturalWidth, h / img.naturalHeight);
+  const sw = w / scale, sh = h / scale;
+  const sx = (img.naturalWidth - sw) / 2, sy = (img.naturalHeight - sh) / 2;
+  ctx.drawImage(img, sx, sy, sw, sh, x, y, w, h);
+}
+
+function loadCanvasImage(src) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = "/api/image?url=" + encodeURIComponent(src);
+  });
+}
+
+async function renderJmlTemplate() {
+  if (!currentData) return;
+  const p = currentData.listing;
+  const canvas = $("visual");
+  const ctx = canvas.getContext("2d");
+  const green = "#073b2a", gold = "#c8a24d";
+  ctx.clearRect(0, 0, 1200, 1200);
+  ctx.fillStyle = "#f7f4ec";
+  ctx.fillRect(0, 0, 1200, 1200);
+
+  const images = await Promise.all((p.images || []).map(loadCanvasImage));
+  const valid = images.filter(Boolean);
+  if (!valid.length) return;
+
+  cropCanvasImage(ctx, valid[0], 0, 0, 1200, 455);
+
+  // JML branding block.
+  const brand = ctx.createLinearGradient(0, 0, 520, 0);
+  brand.addColorStop(0, "rgba(255,255,255,.96)");
+  brand.addColorStop(1, "rgba(255,255,255,.02)");
+  ctx.fillStyle = brand; ctx.fillRect(0, 0, 520, 170);
+  ctx.fillStyle = green; ctx.font = "bold 44px Georgia"; ctx.fillText("JML", 38, 62);
+  ctx.fillStyle = gold; ctx.font = "bold 44px Georgia"; ctx.fillText(" IMMOBILIER", 108, 62);
+  ctx.fillStyle = "#555"; ctx.font = "16px Arial"; ctx.fillText("VOTRE PROJET, NOTRE ENGAGEMENT", 40, 98);
+
+  // Sale/location badge.
+  ctx.fillStyle = green;
+  ctx.beginPath(); ctx.moveTo(780,0); ctx.lineTo(1200,0); ctx.lineTo(1200,225); ctx.lineTo(875,225); ctx.lineTo(780,140); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = gold; ctx.font = "bold 52px Georgia"; ctx.textAlign = "center"; ctx.fillText("À VENDRE", 995, 62);
+  ctx.fillStyle = gold; ctx.fillRect(900, 80, 240, 46);
+  ctx.fillStyle = "#111"; ctx.font = "bold 23px Arial"; ctx.fillText(propertyType(p.title), 1020, 111);
+  ctx.fillStyle = "#fff"; ctx.font = "bold 19px Arial";
+  fitCanvasText(ctx, String(p.location || "").toUpperCase(), 990, 164, 370, "bold 19px Arial");
+  ctx.font = "17px Arial";
+  const postal = String(p.location || "").match(/\((\d{5})\)/);
+  ctx.fillText(postal ? postal[1] : "", 990, 190);
+
+  // Price badge.
+  ctx.fillStyle = "#f1d38a";
+  ctx.fillRect(875, 338, 325, 117);
+  ctx.fillStyle = "#111"; ctx.font = "bold 46px Georgia"; ctx.fillText(p.price || "", 1037, 386);
+  ctx.font = "23px Georgia"; ctx.fillText("Réf. " + (p.reference || "—"), 1037, 424);
+  ctx.textAlign = "left";
+
+  // Photo mosaic: one hero + two large + remaining originals.
+  const rest = valid.slice(1);
+  if (rest[0]) cropCanvasImage(ctx, rest[0], 0, 463, 600, 235);
+  if (rest[1]) cropCanvasImage(ctx, rest[1], 608, 463, 592, 235);
+  const small = rest.slice(2);
+  if (small.length) {
+    const cols = Math.min(5, small.length), gap = 8, y = 706, h = 169;
+    const w = (1200 - gap * (cols - 1)) / cols;
+    small.forEach((img, i) => cropCanvasImage(ctx, img, i * (w + gap), y, w, h));
+  }
+
+  // Main facts strip.
+  const statsY = small.length ? 875 : 706;
+  ctx.fillStyle = "#fff"; ctx.fillRect(0, statsY, 1200, 105);
+  const stats = [
+    ["⌂", p.surface || "—", "m² habitables"],
+    ["♧", p.terrain || "—", "Terrain"],
+    ["▣", String(p.bedrooms == null ? "—" : p.bedrooms), "chambres"],
+    ["▰", String(p.rooms == null ? "—" : p.rooms), "pièces"],
+    ["▤", /garage/i.test(p.description || "") ? "1" : "—", "garage"]
+  ];
+  const sw = 1200 / stats.length;
+  stats.forEach((item, i) => {
+    const x = i * sw + 28;
+    ctx.fillStyle = gold; ctx.beginPath(); ctx.arc(x + 22, statsY + 52, 28, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#fff"; ctx.font = "25px Arial"; ctx.textAlign = "center"; ctx.fillText(item[0], x + 22, statsY + 61);
+    ctx.textAlign = "left"; ctx.fillStyle = "#111"; ctx.font = "bold 22px Georgia"; ctx.fillText(item[1], x + 62, statsY + 48);
+    ctx.font = "15px Arial"; ctx.fillText(item[2], x + 62, statsY + 70);
+  });
+
+  // Highlights strip.
+  const hy = statsY + 105;
+  ctx.fillStyle = green; ctx.fillRect(0, hy, 1200, 125);
+  const highlights = (p.highlights && p.highlights.length ? p.highlights : ["Informations de l'annonce"]).slice(0, 6);
+  const hw = 1200 / highlights.length;
+  highlights.forEach((item, i) => {
+    const x = i * hw + 16;
+    ctx.fillStyle = gold; ctx.font = "24px Arial"; ctx.fillText("◆", x, hy + 50);
+    ctx.fillStyle = "#fff"; fitCanvasText(ctx, item, x + 34, hy + 46, hw - 45, "bold 16px Arial");
+  });
+
+  // Contact footer.
+  const fy = hy + 125;
+  ctx.fillStyle = "#fff"; ctx.fillRect(0, fy, 1200, 120);
+  ctx.fillStyle = gold; ctx.beginPath(); ctx.arc(70, fy + 60, 39, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#fff"; ctx.font = "32px Arial"; ctx.textAlign = "center"; ctx.fillText("☎", 70, fy + 70);
+  ctx.textAlign = "left"; ctx.fillStyle = "#222"; ctx.font = "18px Georgia"; ctx.fillText("Une visite ? Contactez-moi", 130, fy + 40);
+  ctx.font = "bold 33px Georgia"; ctx.fillText("06 26 93 50 41", 130, fy + 82);
+  ctx.fillStyle = gold; ctx.fillRect(510, fy + 20, 2, 80);
+  ctx.fillStyle = "#b18c3f"; ctx.font = "bold 21px Georgia"; ctx.fillText("Abderrahim Boujnikh", 550, fy + 42);
+  ctx.fillStyle = "#333"; ctx.font = "18px Georgia"; ctx.fillText("Agent commercial indépendant", 550, fy + 68);
+  ctx.fillText("Réseau JML Immobilier", 550, fy + 92);
+  ctx.fillStyle = green; ctx.font = "bold 25px Georgia"; ctx.fillText("JML IMMOBILIER", 945, fy + 55);
+  ctx.fillStyle = "#777"; ctx.font = "11px Arial"; ctx.fillText("VOTRE PROJET, NOTRE ENGAGEMENT", 945, fy + 75);
+  ctx.textAlign = "left";
+
+  $("visualSection").style.display = "block";
+}
 
 $("load").addEventListener("click", async () => {
   const url = $("url").value.trim();
@@ -121,6 +255,7 @@ $("load").addEventListener("click", async () => {
     if (!response.ok || !data.ok) throw new Error(data.error || "Impossible de récupérer l'annonce.");
 
     const p = data.listing;
+    currentData = data;
     const rawTitle = p.title || "Annonce JML";
     const typeMatch = rawTitle.match(/^(Appartement|Maison|Pavillon|Terrain|Garage|Immeuble|Local commercial|Local|Studio|Duplex|Loft)/i);
     const propertyType = typeMatch ? typeMatch[1] : rawTitle.split(/\s+/)[0];
@@ -218,6 +353,24 @@ $("load").addEventListener("click", async () => {
   } finally {
     $("load").disabled = false;
   }
+});
+
+$("generate").addEventListener("click", async () => {
+  if (!currentData) return;
+  if (currentData.photoPolicy?.publishAllowedForPhotoTest !== true) {
+    alert("La galerie doit être complète et vérifiée avant de générer le visuel.");
+    return;
+  }
+  await renderJmlTemplate();
+  $("visualSection").scrollIntoView({ behavior: "smooth", block: "start" });
+});
+
+$("download").addEventListener("click", () => {
+  const ref = currentData?.listing?.reference || "annonce";
+  const link = document.createElement("a");
+  link.download = "JML-" + ref + ".png";
+  link.href = $("visual").toDataURL("image/png");
+  link.click();
 });
 </script>
 </body>
