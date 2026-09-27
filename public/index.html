@@ -292,19 +292,6 @@ async function renderJmlTemplate() {
   // HERO
   cropCanvasImage(ctx, photos[0], 0, 0, W, HERO_H);
 
-  // Soft white brand area, matching the reference.
-  const brand = ctx.createLinearGradient(0,0,460,0);
-  brand.addColorStop(0,"rgba(255,255,255,.98)");
-  brand.addColorStop(1,"rgba(255,255,255,.05)");
-  ctx.fillStyle = brand;
-  ctx.fillRect(0,0,475,175);
-
-  // Fixed JML master logo: same asset on every generated visual.
-  const logo = await loadLocalCanvasImage("/jml-logo.svg");
-  if (logo) {
-    ctx.drawImage(logo,28,12,430,115);
-  }
-
   // TOP RIGHT GREEN/GOLD folded badge.
   ctx.fillStyle = GREEN;
   ctx.beginPath();
