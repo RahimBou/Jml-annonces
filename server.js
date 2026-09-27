@@ -409,19 +409,25 @@ function extractHighlights(bodyText) {
   const source = cleanText(bodyText);
   const rules = [
     ["Hyper centre", /hyper\s*centre/i],
-    ["Terrasse", /terrasse/i],
     ["Terrasse plein sud", /terrasse[^.]{0,80}plein\s+sud|plein\s+sud[^.]{0,80}terrasse/i],
+    ["Grande terrasse", /grande\s+terrasse/i],
+    ["Terrasse", /terrasse/i],
     ["Cuisine équipée", /cuisine\s+(?:séparée\s+)?équipée/i],
     ["Salon lumineux", /séjour[^.]{0,80}(?:lumineux|lumineuse)|salon[^.]{0,80}(?:lumineux|lumineuse)/i],
     ["Salle de bains", /salle\s+de\s+bains/i],
+    ["Sous-sol", /sous[- ]sol/i],
+    ["Studio au sous-sol", /studio[^.]{0,100}sous[- ]sol|sous[- ]sol[^.]{0,100}studio/i],
+    ["Grenier aménageable", /grenier[^.]{0,50}aménageable|aménageable[^.]{0,50}grenier/i],
     ["Cave", /\bcave\b/i],
     ["Parking", /parking/i],
     ["Garage possible", /possibilité\s+(?:de\s+)?garage|garage\s+(?:possible|possibilité)/i],
     ["Garage", /\bgarage(?:s)?\b/i],
     ["Vue dégagée", /vue\s+dégagée/i],
     ["Terrain arboré", /terrain\s+arboré/i],
+    ["Terrain piscinable", /terrain[^.]{0,80}piscinable|piscinable[^.]{0,80}terrain/i],
     ["Piscinable", /piscinable/i],
     ["Plain-pied", /plain[- ]pied/i],
+    ["Secteur calme", /secteur[^.]{0,40}calme|très\s+calme/i],
     ["WC séparé", /wc\s+séparé/i],
     ["DPE en cours", /DPE\s+en\s+cours/i]
   ];
