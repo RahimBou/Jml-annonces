@@ -15,12 +15,12 @@
     }
     * { box-sizing: border-box; }
     body { margin:0; font-family: Inter, Arial, sans-serif; background:var(--cream); color:var(--ink); }
-    header { background:var(--green); color:white; padding:28px 20px; border-bottom:4px solid var(--gold); }
-    header .wrap, main { max-width:1100px; margin:auto; }
-    .brand { font-size:28px; font-weight:800; letter-spacing:.5px; }
-    .tagline { color:#e7dcc3; margin-top:4px; }
-    main { padding:28px 20px 60px; }
-    .card { background:white; border:1px solid var(--line); border-radius:16px; padding:22px; box-shadow:0 8px 28px rgba(0,0,0,.05); }
+    header { background:var(--green); color:white; padding:22px 20px; border-bottom:4px solid var(--gold); box-shadow:0 3px 14px rgba(0,0,0,.08); }
+    header .wrap, main { max-width:1180px; margin:auto; }
+    .brand { font-size:27px; font-weight:800; letter-spacing:.4px; }
+    .tagline { color:#e7dcc3; margin-top:5px; font-size:14px; }
+    main { padding:24px 20px 60px; }
+    .card { background:white; border:1px solid var(--line); border-radius:18px; padding:22px; box-shadow:0 8px 28px rgba(31,45,39,.07); }
     label { display:block; font-weight:700; margin-bottom:8px; }
     .row { display:flex; gap:10px; }
     input { flex:1; min-width:0; padding:14px; border:1px solid #cfc8b7; border-radius:10px; font-size:16px; }
@@ -30,13 +30,18 @@
     .error { color:#a12626; font-weight:700; }
     .success { color:#226b45; font-weight:700; }
     #result { margin-top:22px; display:none; }
-    .grid { display:grid; grid-template-columns:1fr 1.4fr; gap:22px; }
-    .facts { display:grid; grid-template-columns:repeat(2,1fr); gap:10px; margin-top:16px; }
-    .fact { padding:12px; background:#faf8f2; border-radius:10px; }
-    .fact b { display:block; font-size:18px; margin-top:3px; }
-    .photos { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
-    .photos img { width:100%; aspect-ratio:4/3; object-fit:cover; border-radius:10px; background:#eee; }
-    .photo-warning { margin-top:12px; padding:12px; border-radius:10px; background:#fff3cd; }
+    .grid { display:grid; grid-template-columns:minmax(300px,.9fr) minmax(420px,1.4fr); gap:26px; align-items:start; }
+    h1 { margin:0 0 12px; font-size:31px; line-height:1.12; color:var(--green); }
+    h2 { color:var(--green); margin-top:0; }
+    #location { color:var(--muted); margin:0 0 12px; font-size:15px; }
+    #price { color:var(--green); font-size:25px; margin:8px 0 18px; }
+    #description { line-height:1.55; color:#4f554f; }
+    .facts { display:grid; grid-template-columns:repeat(2,1fr); gap:11px; margin-top:18px; }
+    .fact { padding:13px 14px; background:#faf8f2; border:1px solid #eee8d9; border-radius:12px; }
+    .fact b { display:block; font-size:18px; margin-top:4px; color:var(--green); }
+    .photos { display:grid; grid-template-columns:repeat(3,1fr); gap:9px; }
+    .photos img { width:100%; aspect-ratio:4/3; object-fit:cover; border-radius:11px; background:#f1eee7; display:block; }
+    .photo-warning { margin-top:12px; padding:12px 14px; border-radius:11px; background:#fbf4df; border:1px solid #ead9aa; color:#65552e; font-size:14px; font-weight:600; }
     @media (max-width:800px) {
       .row, .grid { display:block; }
       button { margin-top:10px; width:100%; }
