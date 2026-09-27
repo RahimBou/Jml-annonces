@@ -694,9 +694,15 @@ app.post("/api/ai-layout", async (req, res) => {
               }
             ],
             generationConfig: {
-              responseMimeType: "application/json",
-              responseSchema: schema,
-              temperature: 0.2
+              responseFormat: {
+                text: {
+                  mimeType: "application/json",
+                  schema
+                }
+              },
+              thinkingConfig: {
+                thinkingLevel: "low"
+              }
             }
           })
         }
@@ -706,7 +712,11 @@ app.post("/api/ai-layout", async (req, res) => {
       if (!response.ok) {
         return res.status(502).json({
           ok: false,
-          error: payload?.error?.message || "Erreur lors de l'appel à Gemini."
+          error:
+            "Gemini (" +
+            model +
+            ") : " +
+            (payload?.error?.message || "erreur lors de l'appel à l'API.")
         });
       }
 
@@ -782,6 +792,9 @@ app.post("/api/ai-layout", async (req, res) => {
         listing.images.map((_, i) => i).filter((i) => !safeIndices.includes(i))
       );
 
+    plan.title = cleanText(plan.title || listing.title || "Bien immobilier");
+    plan.subtitle = cleanText(plan.subtitle || "");
+
     plan.highlights = (Array.isArray(plan.highlights) ? plan.highlights : [])
       .map((x) => cleanText(x))
       .filter(Boolean)
@@ -837,7 +850,25 @@ app.get("/api/image", async (req, res) => {
 });
 
 app.get("/api/health", (_, res) => {
-  res.json({ ok: true, app: "jml-annonces", version: "0.6.0" });
+  const geminiConfigured = Boolean(process.env.GEMINI_API_KEY);
+  const openaiConfigured = Boolean(process.env.OPENAI_API_KEY);
+  const configuredModel = process.env.GEMINI_MODEL || "gemini-3.8-flash";
+
+  res.json({
+    ok: true,
+    app: "jml-annonces",
+    version: "0.7.0",
+    ai: {
+      preferredProvider: geminiConfigured ? "gemini" : openaiConfigured ? "openai" : "none",
+      geminiConfigured,
+      geminiModel: configuredModel,
+      openaiConfigured
+    },
+    photoPolicy: {
+      originalOnly: true,
+      generatedReplacementAllowed: false
+    }
+  });
 });
 
 app.listen(PORT, () => {
