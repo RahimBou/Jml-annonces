@@ -1121,6 +1121,7 @@ app.post("/api/social-copy", async (req, res) => {
 
     const raw = payload?.candidates?.[0]?.content?.parts?.map(p=>p.text||"").join("") || "";
     if (!raw) throw new Error("Réponse Gemini vide.");
+    model = successfulModel;
     const copies = JSON.parse(raw);
 
     const checks = {};
