@@ -1,0 +1,17 @@
+{
+  "name": "jml-annonces",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Générateur de publications JML Immobilier à partir d'une annonce JML.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "cheerio": "^1.1.2",
+    "express": "^5.1.0"
+  }
+}
