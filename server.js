@@ -567,10 +567,6 @@ app.post("/api/scrape", async (req, res) => {
 
 app.post("/api/ai-layout", async (req, res) => {
   try {
-    if (!process.env.OPENAI_API_KEY) {
-      return res.status(503).json({ ok: false, error: "OPENAI_API_KEY n'est pas configurée sur le serveur." });
-    }
-
     const listing = req.body?.listing;
     if (!listing || !Array.isArray(listing.images) || listing.images.length === 0) {
       return res.status(400).json({ ok: false, error: "Annonce ou photos originales manquantes." });
@@ -589,82 +585,223 @@ app.post("/api/ai-layout", async (req, res) => {
       existingHighlights: listing.highlights || []
     };
 
-    const prompt = "Tu es l'assistant éditorial de JML Immobilier. Prépare le contenu d'un visuel immobilier premium à partir UNIQUEMENT des faits fournis. Ne jamais inventer une caractéristique. Les photos sont les photos originales vérifiées et ne doivent jamais être remplacées. Choisis exactement 6 points forts courts, factuels et lisibles. Évite les doublons. Réponds uniquement avec un JSON valide ayant les clés title, subtitle, highlights et photoOrder. highlights doit contenir exactement 6 chaînes. photoOrder doit contenir uniquement des indices 0-based des photos originales.";
+    const prompt = [
+      "Tu es l'assistant éditorial et visuel de JML Immobilier.",
+      "Analyse les faits de l'annonce et, si elles sont fournies, les PHOTOS ORIGINALES.",
+      "Ne jamais inventer une caractéristique du bien.",
+      "Les photos fournies sont les photos originales vérifiées : elles doivent rester exactement les mêmes dans le visuel final.",
+      "Ne génère, ne transforme et ne remplace aucune photo.",
+      "Choisis la meilleure photo pour la photo principale et ordonne les autres photos pour la mosaïque.",
+      "Choisis exactement 6 points forts courts, factuels et lisibles.",
+      "Évite les doublons.",
+      "Réponds uniquement en JSON."
+    ].join(" ");
 
-    const response = await fetch("https://api.openai.com/v1/responses", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer " + process.env.OPENAI_API_KEY
-      },
-      body: JSON.stringify({
-        model: process.env.OPENAI_MODEL || "gpt-5.6-luna",
-        input: [
-          {
-            role: "developer",
-            content: "Tu produis des données JSON strictes pour une application immobilière. Aucun fait ne doit être inventé."
-          },
-          {
-            role: "user",
-            content: [
-              { type: "input_text", text: prompt + "\n\nDONNÉES DE L'ANNONCE:\n" + JSON.stringify(facts) }
-            ]
-          }
-        ],
-        text: {
-          format: {
-            type: "json_schema",
-            name: "jml_visual_plan",
-            strict: true,
-            schema: {
-              type: "object",
-              additionalProperties: false,
-              properties: {
-                title: { type: "string" },
-                subtitle: { type: "string" },
-                highlights: { type: "array", minItems: 6, maxItems: 6, items: { type: "string" } },
-                photoOrder: { type: "array", items: { type: "integer", minimum: 0 } }
-              },
-              required: ["title", "subtitle", "highlights", "photoOrder"]
-            }
-          }
+    const schema = {
+      type: "object",
+      properties: {
+        title: { type: "string" },
+        subtitle: { type: "string" },
+        highlights: {
+          type: "array",
+          minItems: 6,
+          maxItems: 6,
+          items: { type: "string" }
         },
-        max_output_tokens: 700
-      })
-    });
+        photoOrder: {
+          type: "array",
+          items: { type: "integer", minimum: 0 }
+        }
+      },
+      required: ["title", "subtitle", "highlights", "photoOrder"],
+      additionalProperties: false
+    };
 
-    const payload = await response.json();
-    if (!response.ok) {
-      return res.status(502).json({ ok: false, error: payload?.error?.message || "Erreur lors de l'appel à ChatGPT." });
+    // Gemini is the preferred provider because its current API has a Free Tier.
+    // OpenAI remains available as an optional fallback for continuity.
+    const geminiKey = process.env.GEMINI_API_KEY;
+    const openaiKey = process.env.OPENAI_API_KEY;
+
+    if (!geminiKey && !openaiKey) {
+      return res.status(503).json({
+        ok: false,
+        error: "Aucune clé IA configurée. Ajoute GEMINI_API_KEY dans Render pour utiliser Gemini gratuitement."
+      });
     }
 
-    let raw = payload.output_text || "";
     let plan;
-    try {
+    let provider;
+    let model;
+
+    if (geminiKey) {
+      provider = "gemini";
+      model = process.env.GEMINI_MODEL || "gemini-3.8-flash";
+
+      const parts = [
+        {
+          text:
+            prompt +
+            "\n\nDONNÉES DE L'ANNONCE:\n" +
+            JSON.stringify(facts) +
+            "\n\nLes images suivantes correspondent aux photos originales vérifiées. " +
+            "Utilise uniquement leur index 0-based pour photoOrder."
+        }
+      ];
+
+      // Send the actual verified JML photos to Gemini for visual analysis.
+      // The final canvas still uses the original JML URLs without modification.
+      const photoUrls = listing.images.slice(0, 8);
+      for (let i = 0; i < photoUrls.length; i++) {
+        try {
+          const imageResponse = await fetch(photoUrls[i], {
+            headers: {
+              "User-Agent": "Mozilla/5.0 (compatible; JML-Annonces/0.1; +https://www.jml-immobilier.fr/)"
+            }
+          });
+          const contentType = imageResponse.headers.get("content-type") || "image/jpeg";
+          if (!imageResponse.ok || !contentType.startsWith("image/")) continue;
+
+          const bytes = Buffer.from(await imageResponse.arrayBuffer());
+          if (!bytes.length || bytes.length > 6 * 1024 * 1024) continue;
+
+          parts.push({
+            text: "PHOTO ORIGINALE — index " + i
+          });
+          parts.push({
+            inline_data: {
+              mime_type: contentType.split(";")[0],
+              data: bytes.toString("base64")
+            }
+          });
+        } catch {}
+      }
+
+      const response = await fetch(
+        "https://generativelanguage.googleapis.com/v1beta/models/" +
+          encodeURIComponent(model) +
+          ":generateContent",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-goog-api-key": geminiKey
+          },
+          body: JSON.stringify({
+            contents: [
+              {
+                role: "user",
+                parts
+              }
+            ],
+            generationConfig: {
+              responseMimeType: "application/json",
+              responseSchema: schema,
+              temperature: 0.2
+            }
+          })
+        }
+      );
+
+      const payload = await response.json();
+      if (!response.ok) {
+        return res.status(502).json({
+          ok: false,
+          error: payload?.error?.message || "Erreur lors de l'appel à Gemini."
+        });
+      }
+
+      const raw =
+        payload?.candidates?.[0]?.content?.parts
+          ?.map((part) => part.text || "")
+          .join("") || "";
+
+      if (!raw) throw new Error("Réponse Gemini vide.");
       plan = JSON.parse(raw);
-    } catch {
-      const jsonMatch = raw.match(/\{[\\s\\S]*\}/);
-      if (!jsonMatch) throw new Error("Réponse ChatGPT non exploitable.");
-      plan = JSON.parse(jsonMatch[0]);
+    } else {
+      provider = "openai";
+      model = process.env.OPENAI_MODEL || "gpt-5.6-luna";
+
+      const response = await fetch("https://api.openai.com/v1/responses", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer " + openaiKey
+        },
+        body: JSON.stringify({
+          model,
+          input: [
+            {
+              role: "developer",
+              content: "Tu produis des données JSON strictes pour une application immobilière. Aucun fait ne doit être inventé."
+            },
+            {
+              role: "user",
+              content: [
+                {
+                  type: "input_text",
+                  text: prompt + "\n\nDONNÉES DE L'ANNONCE:\n" + JSON.stringify(facts)
+                }
+              ]
+            }
+          ],
+          text: {
+            format: {
+              type: "json_schema",
+              name: "jml_visual_plan",
+              strict: true,
+              schema
+            }
+          },
+          max_output_tokens: 700
+        })
+      });
+
+      const payload = await response.json();
+      if (!response.ok) {
+        return res.status(502).json({
+          ok: false,
+          error: payload?.error?.message || "Erreur lors de l'appel à OpenAI."
+        });
+      }
+
+      const raw = payload.output_text || "";
+      plan = JSON.parse(raw);
     }
 
     const indices = Array.isArray(plan.photoOrder) ? plan.photoOrder : [];
-    const safeIndices = [...new Set(indices.filter((n) => Number.isInteger(n) && n >= 0 && n < listing.images.length))];
+    const safeIndices = [
+      ...new Set(
+        indices.filter(
+          (n) => Number.isInteger(n) && n >= 0 && n < listing.images.length
+        )
+      )
+    ];
+
     plan.photoOrder = (safeIndices.length ? safeIndices : listing.images.map((_, i) => i))
-      .concat(listing.images.map((_, i) => i).filter((i) => !safeIndices.includes(i)));
+      .concat(
+        listing.images.map((_, i) => i).filter((i) => !safeIndices.includes(i))
+      );
 
     plan.highlights = (Array.isArray(plan.highlights) ? plan.highlights : [])
-      .map((x) => cleanText(x)).filter(Boolean).slice(0, 6);
+      .map((x) => cleanText(x))
+      .filter(Boolean)
+      .slice(0, 6);
 
-    for (const fallback of (listing.highlights || [])) {
+    for (const fallback of listing.highlights || []) {
       if (plan.highlights.length >= 6) break;
       if (!plan.highlights.includes(fallback)) plan.highlights.push(fallback);
     }
     while (plan.highlights.length < 6) plan.highlights.push("Voir l'annonce");
 
-    res.json({ ok: true, model: process.env.OPENAI_MODEL || "gpt-5.6-luna", plan, originalPhotosOnly: true });
+    res.json({
+      ok: true,
+      provider,
+      model,
+      plan,
+      originalPhotosOnly: true
+    });
   } catch (error) {
-    res.status(500).json({ ok: false, error: error.message || "Erreur ChatGPT." });
+    res.status(500).json({ ok: false, error: error.message || "Erreur IA." });
   }
 });
 
