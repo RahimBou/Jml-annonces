@@ -278,6 +278,53 @@ function extractExpectedPhotoCount($, bodyText) {
   return null;
 }
 
+function extractReference($, bodyText, sourceUrl) {
+  const selectors = [
+    "[class*='reference']",
+    "[class*='ref']",
+    "[id*='reference']",
+    "[id*='ref']"
+  ];
+
+  for (const selector of selectors) {
+    const text = cleanText($(selector).first().text());
+    const match = text.match(/(?:réf(?:érence)?|ref(?:erence)?)\s*[:#-]?\s*([A-Z0-9-]{2,20})/i);
+    if (match) return match[1];
+  }
+
+  const bodyMatch = String(bodyText || "").match(/(?:réf(?:érence)?|ref(?:erence)?)\s*[:#-]?\s*([A-Z0-9-]{2,20})/i);
+  if (bodyMatch) return bodyMatch[1];
+
+  const urlMatch = String(sourceUrl || "").match(/(?:^|-)(\\d{2,})-[^/]+$/);
+  return urlMatch ? urlMatch[1] : null;
+}
+
+function extractHighlights(bodyText) {
+  const source = cleanText(bodyText);
+  const rules = [
+    ["Hyper centre", /hyper\s*centre/i],
+    ["Terrasse", /terrasse/i],
+    ["Terrasse plein sud", /terrasse[^.]{0,80}plein\s+sud|plein\s+sud[^.]{0,80}terrasse/i],
+    ["Cuisine équipée", /cuisine\s+(?:séparée\s+)?équipée/i],
+    ["Salon lumineux", /séjour[^.]{0,80}(?:lumineux|lumineuse)|salon[^.]{0,80}(?:lumineux|lumineuse)/i],
+    ["Cave", /\bcave\b/i],
+    ["Garage possible", /possibilité\s+(?:de\s+)?garage|garage\s+(?:possible|possibilité)/i],
+    ["Garage", /\bgarage(?:s)?\b/i],
+    ["Vue dégagée", /vue\s+dégagée/i],
+    ["Terrain arboré", /terrain\s+arboré/i],
+    ["Piscinable", /piscinable/i],
+    ["Plain-pied", /plain[- ]pied/i],
+    ["DPE en cours", /DPE\s+en\s+cours/i]
+  ];
+
+  const result = [];
+  for (const [label, pattern] of rules) {
+    if (pattern.test(source) && !result.includes(label)) result.push(label);
+    if (result.length >= 6) break;
+  }
+  return result;
+}
+
 function parsePrice(text) {
   if (!text) return null;
   const normalized = String(text).replace(/\\u00a0/g, " ").replace(/\s+/g, " ").trim();
@@ -356,12 +403,16 @@ function parseListing(html, sourceUrl) {
   });
 
   const title = structured.name || firstText($, ["h1", "title"]);
+  const reference = extractReference($, bodyText, sourceUrl);
+  const highlights = extractHighlights(bodyText);
   const photoExtraction = collectImages($);
   const images = photoExtraction.images;
   const expectedPhotoCount = extractExpectedPhotoCount($, bodyText);
 
   const property = {
     title,
+    reference,
+    highlights,
     price: structured.price ? parsePrice(structured.price + " €") : extractPrice($, bodyText),
     sourceUrl,
     location: structured.location || null,
@@ -524,7 +575,7 @@ app.get("/api/image", async (req, res) => {
 });
 
 app.get("/api/health", (_, res) => {
-  res.json({ ok: true, app: "jml-annonces", version: "0.3.0" });
+  res.json({ ok: true, app: "jml-annonces", version: "0.4.0" });
 });
 
 app.listen(PORT, () => {
