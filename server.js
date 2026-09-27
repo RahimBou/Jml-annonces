@@ -696,7 +696,7 @@ app.post("/api/ai-layout", async (req, res) => {
             generationConfig: {
               responseFormat: {
                 text: {
-                  mimeType: "application/json",
+                  mimeType: "APPLICATION_JSON",
                   schema
                 }
               },
