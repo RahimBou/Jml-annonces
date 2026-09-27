@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>JML Annonces Auto</title>
+  <style>
+    :root {
+      --green: #17382f;
+      --gold: #c6a15b;
+      --cream: #f6f2e9;
+      --ink: #202420;
+      --muted: #6f746f;
+      --line: #ddd8ca;
+    }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: Inter, Arial, sans-serif; background:var(--cream); color:var(--ink); }
+    header { background:var(--green); color:white; padding:28px 20px; border-bottom:4px solid var(--gold); }
+    header .wrap, main { max-width:1100px; margin:auto; }
+    .brand { font-size:28px; font-weight:800; letter-spacing:.5px; }
+    .tagline { color:#e7dcc3; margin-top:4px; }
+    main { padding:28px 20px 60px; }
+    .card { background:white; border:1px solid var(--line); border-radius:16px; padding:22px; box-shadow:0 8px 28px rgba(0,0,0,.05); }
+    label { display:block; font-weight:700; margin-bottom:8px; }
+    .row { display:flex; gap:10px; }
+    input { flex:1; min-width:0; padding:14px; border:1px solid #cfc8b7; border-radius:10px; font-size:16px; }
+    button { border:0; border-radius:10px; padding:14px 18px; background:var(--green); color:white; font-weight:700; cursor:pointer; }
+    button:disabled { opacity:.5; cursor:not-allowed; }
+    .status { margin-top:14px; color:var(--muted); }
+    .error { color:#a12626; font-weight:700; }
+    .success { color:#226b45; font-weight:700; }
+    #result { margin-top:22px; display:none; }
+    .grid { display:grid; grid-template-columns:1fr 1.4fr; gap:22px; }
+    .facts { display:grid; grid-template-columns:repeat(2,1fr); gap:10px; margin-top:16px; }
+    .fact { padding:12px; background:#faf8f2; border-radius:10px; }
+    .fact b { display:block; font-size:18px; margin-top:3px; }
+    .photos { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+    .photos img { width:100%; aspect-ratio:4/3; object-fit:cover; border-radius:10px; background:#eee; }
+    .photo-warning { margin-top:12px; padding:12px; border-radius:10px; background:#fff3cd; }
+    @media (max-width:800px) {
+      .row, .grid { display:block; }
+      button { margin-top:10px; width:100%; }
+      .photos { margin-top:18px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <div class="brand">JML Immobilier</div>
+      <div class="tagline">Annonces Auto — génération de publications à partir des vraies annonces JML</div>
+    </div>
+  </header>
+
+  <main>
+    <section class="card">
+      <label for="url">Lien de l'annonce JML</label>
+      <div class="row">
+        <input id="url" placeholder="https://www.jml-immobilier.fr/vente/..." autocomplete="url">
+        <button id="load">Récupérer l'annonce</button>
+      </div>
+      <div id="status" class="status">Aucune donnée chargée.</div>
+    </section>
+
+    <section id="result" class="card">
+      <div class="grid">
+        <div>
+          <h1 id="title"></h1>
+          <p id="location"></p>
+          <h2 id="price"></h2>
+          <p id="description"></p>
+          <div class="facts">
+            <div class="fact">Surface<b id="surface">—</b></div>
+            <div class="fact">Terrain<b id="terrain">—</b></div>
+            <div class="fact">Chambres<b id="bedrooms">—</b></div>
+            <div class="fact">Pièces<b id="rooms">—</b></div>
+          </div>
+        </div>
+        <div>
+          <h2>Photos originales récupérées</h2>
+          <div id="photos" class="photos"></div>
+          <div id="photoWarning" class="photo-warning"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+
+$("load").addEventListener("click", async () => {
+  const url = $("url").value.trim();
+  if (!url) return;
+
+  $("load").disabled = true;
+  $("status").textContent = "Récupération de l'annonce et des photos originales…";
+  $("status").className = "status";
+  $("result").style.display = "none";
+
+  try {
+    const response = await fetch("/api/scrape", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url })
+    });
+    const data = await response.json();
+    if (!response.ok || !data.ok) throw new Error(data.error || "Impossible de récupérer l'annonce.");
+
+    const p = data.listing;
+    $("title").textContent = p.title || "Annonce JML";
+    $("location").textContent = p.location || "Localisation non détectée";
+    $("price").textContent = p.price || "Prix non détecté";
+    $("description").textContent = p.description || "Description non détectée";
+    $("surface").textContent = p.surface || "—";
+    $("terrain").textContent = p.terrain || "—";
+    $("bedrooms").textContent = p.bedrooms ?? "—";
+    $("rooms").textContent = p.rooms ?? "—";
+
+    const photos = $("photos");
+    photos.innerHTML = "";
+    p.images.forEach((src) => {
+      const img = document.createElement("img");
+      img.src = src;
+      img.alt = "Photo originale de l'annonce JML";
+      img.loading = "lazy";
+      photos.appendChild(img);
+    });
+
+    $("photoWarning").textContent = p.imageCount
+      ? `✓ ${p.imageCount} photo(s) originale(s) détectée(s). Aucune photo IA ne sera utilisée.`
+      : "⚠ Aucune photo originale récupérée : la future publication devra rester bloquée.";
+
+    $("status").textContent = "Annonce récupérée.";
+    $("status").className = "status success";
+    $("result").style.display = "block";
+  } catch (error) {
+    $("status").textContent = error.message;
+    $("status").className = "status error";
+  } finally {
+    $("load").disabled = false;
+  }
+});
+</script>
+</body>
+</html>
