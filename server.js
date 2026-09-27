@@ -339,7 +339,9 @@ app.post("/api/social/publish/facebook", async (req, res) => {
     ));
     chunks.push(buffer);
     chunks.push(Buffer.from("\r\n"));
-    addField("caption", message);
+    // For Page photo publishing, Graph API expects the post text in
+    // the "message" field. Keep "published=true" explicit.
+    addField("message", message);
     addField("published", "true");
     addField("access_token", account.accessToken);
     chunks.push(Buffer.from("--" + boundary + "--\r\n"));
@@ -360,9 +362,12 @@ app.post("/api/social/publish/facebook", async (req, res) => {
     const payload = await graphResponse.json();
 
     if (!graphResponse.ok || !payload?.id) {
+      const metaError = payload?.error;
       return res.status(502).json({
         ok:false,
-        error: payload?.error?.message || "Meta n'a pas accepté la publication."
+        error: metaError?.message || "Meta n'a pas accepté la publication.",
+        metaCode: metaError?.code ?? null,
+        metaSubcode: metaError?.error_subcode ?? null
       });
     }
 
