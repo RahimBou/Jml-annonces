@@ -803,17 +803,80 @@ app.post("/api/ai-layout", async (req, res) => {
         }
       );
 
-      const payload = await response.json();
-      if (!response.ok) {
+      let payload = null;
+      let response = null;
+      let successfulModel = model;
+
+      // Gemini can temporarily return 429/503 when a model is under heavy load.
+      // Retry with a short delay, then fall back to the previous stable Flash model.
+      // The fallback still uses Gemini and the same verified original photos.
+      const geminiModels = [...new Set([
+        model,
+        "gemini-3.7-flash",
+        "gemini-3.6-flash"
+      ])];
+
+      for (const candidateModel of geminiModels) {
+        for (let attempt = 0; attempt < 2; attempt++) {
+          response = await fetch(
+            "https://generativelanguage.googleapis.com/v1beta/models/" +
+              encodeURIComponent(candidateModel) +
+              ":generateContent",
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "x-goog-api-key": geminiKey
+              },
+              body: JSON.stringify({
+                contents: [
+                  {
+                    role: "user",
+                    parts
+                  }
+                ],
+                generationConfig: {
+                  responseFormat: {
+                    text: {
+                      mimeType: "APPLICATION_JSON",
+                      schema
+                    }
+                  },
+                  thinkingConfig: {
+                    thinkingLevel: "low"
+                  }
+                }
+              })
+            }
+          );
+
+          payload = await response.json();
+
+          if (response.ok) {
+            successfulModel = candidateModel;
+            break;
+          }
+
+          const retryable = response.status === 429 || response.status === 503;
+          if (!retryable || attempt === 1) break;
+          await new Promise(resolve => setTimeout(resolve, 900));
+        }
+
+        if (response?.ok) break;
+      }
+
+      if (!response?.ok) {
         return res.status(502).json({
           ok: false,
           error:
-            "Gemini (" +
+            "Gemini indisponible temporairement (" +
             model +
-            ") : " +
-            (payload?.error?.message || "erreur lors de l'appel à l'API.")
+            "). Les modèles Gemini de secours ont également échoué. " +
+            (payload?.error?.message || "Réessayez dans quelques instants.")
         });
       }
+
+      model = successfulModel;
 
       const raw =
         payload?.candidates?.[0]?.content?.parts
@@ -1016,10 +1079,44 @@ app.post("/api/social-copy", async (req, res) => {
       }
     );
 
-    const payload = await response.json();
+    let payload = await response.json();
+    let successfulModel = model;
+
+    // Same resilience policy as the visual planner: temporary Gemini load
+    // errors are retried and then handled by a stable Flash fallback.
+    if (!response.ok && (response.status === 429 || response.status === 503)) {
+      for (const candidateModel of [...new Set([model, "gemini-3.7-flash", "gemini-3.6-flash"])]) {
+        if (candidateModel === model) {
+          // The first request has already been made; retry it once.
+        } else {
+          await new Promise(resolve => setTimeout(resolve, 300));
+        }
+
+        response = await fetch(
+          "https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(candidateModel) + ":generateContent",
+          {
+            method:"POST",
+            headers:{"Content-Type":"application/json","x-goog-api-key":geminiKey},
+            body:JSON.stringify({
+              contents:[{role:"user",parts:[{text:prompt+"\n\nDONNÉES SOURCE :\n"+JSON.stringify(facts)}]}],
+              generationConfig:{
+                responseFormat:{text:{mimeType:"APPLICATION_JSON",schema}},
+                thinkingConfig:{thinkingLevel:"low"}
+              }
+            })
+          }
+        );
+        payload = await response.json();
+        if (response.ok) {
+          successfulModel = candidateModel;
+          break;
+        }
+      }
+    }
+
     if (!response.ok) return res.status(502).json({
       ok:false,
-      error:"Gemini ("+model+") : "+(payload?.error?.message || "erreur lors de la génération.")
+      error:"Gemini ("+model+") temporairement indisponible. "+(payload?.error?.message || "Réessayez dans quelques instants.")
     });
 
     const raw = payload?.candidates?.[0]?.content?.parts?.map(p=>p.text||"").join("") || "";
