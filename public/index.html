@@ -87,7 +87,13 @@
             <div class="fact">Chambres<b id="bedrooms">—</b></div>
             <div class="fact">Pièces<b id="rooms">—</b></div>
           </div>
-          <div class="actions" style="display:flex;gap:10px;flex-wrap:wrap"><button id="generate">Générer le visuel JML</button><button id="generateAI" style="background:#b28b3f">✨ Générer avec Gemini</button></div>
+          <div class="actions" style="display:flex;gap:10px;flex-wrap:wrap">
+  <button id="generate">Générer le visuel JML</button>
+  <button id="generateAI" style="background:#b28b3f">✨ Générer avec Gemini</button>
+</div>
+<div id="dataController" class="photo-warning" style="margin-top:12px;background:#f5f2e9;border-color:#d8cda9">
+  🔒 <b>Contrôleur de données</b> — en attente de contrôle.
+</div>
         </div>
         <div>
           <h2>Photos originales récupérées</h2>
@@ -539,6 +545,32 @@ $("generateAI").addEventListener("click", async () => {
     if (!response.ok || !data.ok) throw new Error(data.error || "Gemini n'est pas disponible.");
 
     currentData.listing.aiPlan = data.plan;
+
+    // Mandatory factual control before the visual can be considered publishable.
+    const validationResponse = await fetch("/api/validate-content", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        listing: currentData.listing,
+        content: data.plan
+      })
+    });
+    const validation = await validationResponse.json();
+    if (!validationResponse.ok || !validation.ok || !validation.dataController?.approved) {
+      const rejected = validation.dataController?.rejected || 0;
+      $("dataController").className = "photo-warning photo-blocked";
+      $("dataController").innerHTML =
+        "🔴 <b>Publication bloquée.</b> Le contrôleur a détecté " + rejected +
+        " information(s) qui ne sont pas suffisamment justifiées par l'annonce source.";
+      throw new Error("Contrôle des données échoué : le contenu doit être vérifié avant publication.");
+    }
+
+    $("dataController").className = "photo-warning photo-complete";
+    $("dataController").innerHTML =
+      "🟢 <b>Données contrôlées.</b> " +
+      validation.dataController.checked + " élément(s) vérifié(s), 0 information non justifiée. " +
+      "Publication autorisable sous réserve d'une dernière vérification humaine.";
+
     status.textContent =
       "🟢 Gemini a préparé le contenu (" +
       (data.model || "modèle configuré") +
