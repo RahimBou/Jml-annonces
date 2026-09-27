@@ -106,6 +106,21 @@
     </section>
   </main>
 
+  <section id="socialSection" class="card" style="display:none;margin-top:20px">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+      <div>
+        <h2 style="margin:0;color:var(--green)">Préparer les publications</h2>
+        <div id="socialController" class="photo-meta">Les textes seront contrôlés contre l'annonce source avant validation.</div>
+      </div>
+      <button id="generateSocial" style="background:#b28b3f">✨ Préparer Facebook · Instagram · LinkedIn</button>
+    </div>
+    <div id="socialCopies" style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:16px">
+      <div class="fact"><b>Facebook</b><p id="facebookCopy">—</p></div>
+      <div class="fact"><b>Instagram</b><p id="instagramCopy">—</p></div>
+      <div class="fact"><b>LinkedIn</b><p id="linkedinCopy">—</p></div>
+    </div>
+  </section>
+
   <section id="visualSection" class="card" style="display:none;margin-top:20px">
     <div class="visual-actions" style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px">
       <h2 style="margin:0;color:var(--green)">Visuel JML généré</h2>
@@ -579,6 +594,42 @@ $("generateAI").addEventListener("click", async () => {
     $("visualSection").scrollIntoView({ behavior: "smooth", block: "start" });
   } catch (error) {
     status.textContent = "🔴 " + error.message;
+  } finally {
+    button.disabled = false;
+  }
+});
+
+$("generateSocial").addEventListener("click", async () => {
+  if (!currentData?.listing?.aiPlan) {
+    alert("Génère d'abord le visuel avec Gemini afin de contrôler les données.");
+    return;
+  }
+
+  const button = $("generateSocial");
+  const controller = $("socialController");
+  button.disabled = true;
+  controller.textContent = "⏳ Gemini prépare les 3 textes puis le contrôleur vérifie chaque information…";
+
+  try {
+    const response = await fetch("/api/social-copy", {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({listing:currentData.listing})
+    });
+    const data = await response.json();
+    if (!response.ok || !data.ok) throw new Error(data.error || "Impossible de préparer les publications.");
+
+    $("facebookCopy").textContent = data.copies.facebook;
+    $("instagramCopy").textContent = data.copies.instagram;
+    $("linkedinCopy").textContent = data.copies.linkedin;
+    $("socialSection").style.display = "block";
+    controller.className = "photo-warning photo-complete";
+    controller.innerHTML = "🟢 <b>3 textes contrôlés.</b> Facebook, Instagram et LinkedIn sont basés sur les données de l'annonce source.";
+    $("socialSection").scrollIntoView({behavior:"smooth",block:"start"});
+  } catch(error) {
+    controller.className = "photo-warning photo-blocked";
+    controller.textContent = "🔴 " + error.message;
+    $("socialSection").style.display = "block";
   } finally {
     button.disabled = false;
   }
