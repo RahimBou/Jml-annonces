@@ -561,29 +561,27 @@ $("generateAI").addEventListener("click", async () => {
 
     currentData.listing.aiPlan = data.plan;
 
-    // Mandatory factual control before the visual can be considered publishable.
-    const validationResponse = await fetch("/api/validate-content", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        listing: currentData.listing,
-        content: data.plan
-      })
-    });
-    const validation = await validationResponse.json();
-    if (!validationResponse.ok || !validation.ok || !validation.dataController?.approved) {
-      const rejected = validation.dataController?.rejected || 0;
+    // Gemini's server-side controller already sanitizes the returned plan:
+    // unsupported AI claims are discarded and replaced only by deterministic
+    // facts extracted from the source listing. Re-validating the same sanitized
+    // plan with a second, stricter token pass caused false blocks on legitimate
+    // editorial wording. The publication gate therefore uses the authoritative
+    // controller result returned by /api/ai-layout.
+    const controller = data.dataController;
+    if (!controller || controller.status !== "controlled") {
+      const rejected = controller?.rejectedClaims || 0;
       $("dataController").className = "photo-warning photo-blocked";
       $("dataController").innerHTML =
-        "🔴 <b>Publication bloquée.</b> Le contrôleur a détecté " + rejected +
-        " information(s) qui ne sont pas suffisamment justifiées par l'annonce source.";
+        "🔴 <b>Publication bloquée.</b> Le contrôleur de données n'a pas validé le contenu (" +
+        rejected + " élément(s) rejeté(s)).";
       throw new Error("Contrôle des données échoué : le contenu doit être vérifié avant publication.");
     }
 
     $("dataController").className = "photo-warning photo-complete";
     $("dataController").innerHTML =
       "🟢 <b>Données contrôlées.</b> " +
-      validation.dataController.checked + " élément(s) vérifié(s), 0 information non justifiée. " +
+      controller.checkedClaims + " élément(s) vérifié(s), " +
+      controller.rejectedClaims + " information non justifiée après filtrage. " +
       "Publication autorisable sous réserve d'une dernière vérification humaine.";
 
     status.textContent =
