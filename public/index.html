@@ -357,17 +357,75 @@ async function renderJmlTemplate() {
     if (img) cropCanvasImage(ctx,img,i*(smallW+gap),smallY,smallW,181);
   }
 
-  // STATS — five columns exactly like the reference.
+  // STATS — five columns. Never display an empty "—" field:
+  // when a standard stat is unavailable, use another factual item explicitly
+  // present in the listing description/highlights.
   ctx.fillStyle = WHITE;
   ctx.fillRect(0,STATS_Y,W,STATS_H);
 
-  const stats = [
-    ["⌂",p.surface || "—","habitables"],
-    ["♧",p.terrain || "—","Terrain"],
-    ["▣",String(p.bedrooms ?? "—"),"chambres"],
-    ["▰",String(p.rooms ?? "—"),"pièces"],
-    ["▤",/garage/i.test(p.description || "") ? "1" : "—","garage"]
-  ];
+  const description = String(p.description || "");
+  const sourceHighlights = Array.isArray(p.highlights) ? p.highlights : [];
+  const approvedHighlights = Array.isArray(p.aiPlan?.highlights)
+    ? p.aiPlan.highlights
+    : sourceHighlights;
+
+  const findStat = (label, icon, value, caption) => value
+    ? [icon, String(value), caption]
+    : null;
+
+  const garageMatch =
+    description.match(/(?:([0-9]+)\s*)garages?/i) ||
+    description.match(/garage[^.]{0,45}?([0-9]+)\s*voitures?/i);
+  const garageCount = garageMatch ? garageMatch[1] : null;
+
+  const livingMatch = description.match(/(?:séjour|salon|pièce à vivre)[^\d]{0,35}([0-9]+(?:[.,][0-9]+)?)\s*m²/i);
+  const livingArea = livingMatch ? livingMatch[1].replace(",", ".") + " m²" : null;
+
+  const factual = [
+    findStat("surface", "⌂", p.surface, "habitables"),
+    findStat("terrain", "♧", p.terrain, "Terrain"),
+    findStat("bedrooms", "▣", p.bedrooms != null ? p.bedrooms : null, "chambres"),
+    findStat("rooms", "▰", p.rooms != null ? p.rooms : null, "pièces"),
+    findStat("garage", "▤", garageCount, "garage" + (garageCount === "1" ? "" : "s")),
+    findStat("living", "▥", livingArea, "séjour"),
+    sourceHighlights.includes("Terrasse") || approvedHighlights.includes("Terrasse")
+      ? ["▰", "Oui", "terrasse"] : null,
+    sourceHighlights.includes("Cave") || approvedHighlights.includes("Cave")
+      ? ["▤", "Oui", "cave"] : null,
+    sourceHighlights.includes("Parking") || approvedHighlights.includes("Parking")
+      ? ["▤", "Oui", "parking"] : null,
+    sourceHighlights.includes("Salle de bains") || approvedHighlights.includes("Salle de bains")
+      ? ["▥", "Oui", "salle de bains"] : null,
+    sourceHighlights.includes("Piscinable") || approvedHighlights.includes("Piscinable")
+      ? ["◇", "Oui", "piscinable"] : null
+  ].filter(Boolean);
+
+  const stats = [];
+  const seenCaptions = new Set();
+  for (const item of factual) {
+    const caption = String(item[2]).toLowerCase();
+    if (seenCaptions.has(caption)) continue;
+    seenCaptions.add(caption);
+    stats.push(item);
+    if (stats.length === 5) break;
+  }
+
+  // Absolute fallback only when the source really contains no additional
+  // factual field: use the existing rooms/bedrooms/surface data, never "—".
+  if (stats.length < 5) {
+    const fallback = [
+      findStat("surface", "⌂", p.surface, "habitables"),
+      findStat("bedrooms", "▣", p.bedrooms, "chambres"),
+      findStat("rooms", "▰", p.rooms, "pièces")
+    ].filter(Boolean);
+    for (const item of fallback) {
+      if (stats.length >= 5) break;
+      if (!seenCaptions.has(String(item[2]).toLowerCase())) {
+        seenCaptions.add(String(item[2]).toLowerCase());
+        stats.push(item);
+      }
+    }
+  }
   const statW = W/5;
 
   stats.forEach((item,i)=>{
