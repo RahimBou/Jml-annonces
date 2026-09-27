@@ -133,9 +133,41 @@ function collectImages($) {
 }
 function parsePrice(text) {
   if (!text) return null;
-  const match = text.replace(/\\s/g, "").match(/([0-9][0-9 .]*)€/);
-  return match ? match[1].replace(/\\./g, " ") + " €" : text;
+  const normalized = String(text).replace(/\\u00a0/g, " ").replace(/\\s+/g, " ").trim();
+  const match = normalized.match(/([0-9][0-9 .]{2,})\\s*€/);
+  return match ? match[1].replace(/\\s+/g, " ").trim() + " €" : null;
 }
+
+function extractPrice($, bodyText) {
+  const selectors = [
+    "[class*='prix']",
+    "[class*='price']",
+    "[itemprop='price']",
+    "meta[property='product:price:amount']",
+    "meta[itemprop='price']"
+  ];
+
+  for (const selector of selectors) {
+    $(selector).each((_, el) => {
+      if (extractPrice.value) return;
+      const raw = $(el).attr("content") || $(el).text();
+      const parsed = parsePrice(raw);
+      if (parsed) extractPrice.value = parsed;
+    });
+    if (extractPrice.value) break;
+  }
+
+  if (extractPrice.value) {
+    const value = extractPrice.value;
+    extractPrice.value = null;
+    return value;
+  }
+
+  const matches = [...bodyText.matchAll(/([0-9][0-9 .]{2,})\\s*€/g)]
+    .map((m) => m[1].replace(/\\s+/g, " ").trim() + " €");
+  return matches.length ? matches[0] : null;
+}
+extractPrice.value = null;
 
 function parseListing(html, sourceUrl) {
   const $ = cheerio.load(html);
@@ -146,7 +178,7 @@ function parseListing(html, sourceUrl) {
 
   const property = {
     title,
-    price: parsePrice(bodyText.match(/[0-9][0-9 .]*€/)?.[0] || null),
+    price: extractPrice($, bodyText),
     sourceUrl,
     location: null,
     surface: null,
@@ -195,6 +227,27 @@ app.post("/api/scrape", async (req, res) => {
 
     const html = await response.text();
     const listing = parseListing(html, sourceUrl);
+
+    // Validate candidate images from the server side. This removes broken,
+    // non-image and stale gallery references before the browser displays them.
+    const validated = [];
+    for (const imageUrl of listing.images) {
+      try {
+        const imageResponse = await fetch(imageUrl, {
+          headers: {
+            "User-Agent": "Mozilla/5.0 (compatible; JML-Annonces/0.1; +https://www.jml-immobilier.fr/)"
+          }
+        });
+        const contentType = imageResponse.headers.get("content-type") || "";
+        if (imageResponse.ok && contentType.startsWith("image/")) {
+          validated.push(imageUrl);
+        }
+      } catch {}
+      if (validated.length >= 15) break;
+    }
+
+    listing.images = validated;
+    listing.imageCount = validated.length;
 
     res.json({
       ok: true,
