@@ -317,6 +317,37 @@ app.post("/api/scrape", async (req, res) => {
   }
 });
 
+app.get("/api/image", async (req, res) => {
+  try {
+    const raw = String(req.query.url || "");
+    const imageUrl = new URL(raw);
+
+    // The proxy is intentionally restricted to JML hosts to prevent SSRF.
+    const allowedHosts = new Set(["www.jml-immobilier.fr", "jml-immobilier.fr"]);
+    if (imageUrl.protocol !== "https:" || !allowedHosts.has(imageUrl.hostname)) {
+      return res.status(400).end();
+    }
+
+    const response = await fetch(imageUrl.toString(), {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; JML-Annonces/0.1; +https://www.jml-immobilier.fr/)"
+      }
+    });
+
+    const contentType = response.headers.get("content-type") || "";
+    if (!response.ok || !contentType.startsWith("image/")) {
+      return res.status(404).end();
+    }
+
+    res.setHeader("Content-Type", contentType);
+    res.setHeader("Cache-Control", "public, max-age=86400");
+    const buffer = Buffer.from(await response.arrayBuffer());
+    res.send(buffer);
+  } catch {
+    res.status(400).end();
+  }
+});
+
 app.get("/api/health", (_, res) => {
   res.json({ ok: true, app: "jml-annonces", version: "0.1.0" });
 });
