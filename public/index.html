@@ -208,7 +208,7 @@
         <input id="storySubheadline" value="Découvrez ce que ce bien peut vous offrir" maxlength="55" placeholder="Sous-accroche">
         <input id="storyContactName" value="Abderrahim Boujnikh" maxlength="40" placeholder="Nom">
         <input id="storyContactRole" value="Agent commercial indépendant en immobilier" maxlength="52" placeholder="Fonction">
-        <input id="storyContactPhone" value="" maxlength="20" placeholder="Téléphone">
+        <input id="storyContactPhone" value="06 26 93 50 41" maxlength="20" placeholder="Téléphone">
         <input id="storyContactCta" value="Parlons de votre projet" maxlength="40" placeholder="Appel à l'action">
       </div>
     </div>    <div class="card" style="margin-top:14px;padding:14px;background:#f5f3ed;border:1px solid rgba(23,56,47,.12)">
@@ -1447,7 +1447,7 @@ function drawStoryPhotoFrame(ctx, p, img, index, count, progress, W, H, logo, cl
   const sub = String($("storySubheadline")?.value || "Découvrez ce que ce bien peut vous offrir").trim();
   const name = String($("storyContactName")?.value || "Abderrahim Boujnikh").trim();
   const role = String($("storyContactRole")?.value || "Agent commercial indépendant en immobilier").trim();
-  const phone = String($("storyContactPhone")?.value || "").trim();
+  const phone = String($("storyContactPhone")?.value || "06 26 93 50 41").trim();
   const cta = String($("storyContactCta")?.value || "Parlons de votre projet").trim();
   const location = String(p.location || "").replace(/\s*\(\d{5}\)/, "").trim() || "Ardennes";
 
