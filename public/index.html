@@ -1738,46 +1738,34 @@ async function createStoryVideo() {
           // Transition propre : on rend chaque image complète dans un canvas
           // séparé avant de l'animer. Ainsi les bandeaux et la photo ne se mélangent
           // plus de façon sale pendant le passage d'une image à l'autre.
-          const ratio = loaded[index].naturalWidth / Math.max(1, loaded[index].naturalHeight);
-          const transitionStyle = ratio >= 1.35 ? "slide" : (ratio <= 0.80 ? "zoom" : "fade");
+          // Transition universelle très douce : on abandonne les glissements et
+          // zooms de transition qui peuvent donner un effet saccadé sur mobile.
+          // Le mouvement de zoom de chaque photo reste actif séparément.
           const transitionDuration = Math.min(
-            transitionStyle === "slide" ? 0.46 : 0.38,
-            currentDuration * 0.22,
-            index < photoDurations.length - 1 ? photoDurations[index + 1] * 0.22 : 0.38
+            0.72,
+            currentDuration * 0.30,
+            index < photoDurations.length - 1 ? photoDurations[index + 1] * 0.30 : 0.72
           );
 
           if (index < loaded.length - 1 && local > 1 - (transitionDuration / currentDuration)) {
             const transitionProgress =
               (local - (1 - transitionDuration / currentDuration)) /
               (transitionDuration / currentDuration);
-            const a = Math.max(0, Math.min(1, transitionProgress));
+
+            // Courbe smoothstep : départ et arrivée sans à-coup.
+            const a0 = Math.max(0, Math.min(1, transitionProgress));
+            const a = a0 * a0 * (3 - 2 * a0);
 
             const nextCanvas = document.createElement("canvas");
             nextCanvas.width = W;
             nextCanvas.height = H;
             const nextCtx = nextCanvas.getContext("2d", { alpha: false });
+            // La prochaine image démarre avec son propre zoom très léger.
             drawStoryPhotoFrame(nextCtx, p, loaded[index + 1], index + 1, loaded.length, 0, W, H, logo, true);
 
             ctx.save();
-            if (transitionStyle === "slide") {
-              // La prochaine photo arrive doucement depuis la droite.
-              ctx.globalAlpha = 1;
-              ctx.drawImage(nextCanvas, (1 - a) * W * 0.12, 0, W, H);
-              ctx.fillStyle = "rgba(246,242,233," + (1 - a) * 0.12 + ")";
-              ctx.fillRect(0, 0, W, H);
-            } else if (transitionStyle === "zoom") {
-              // Portrait : zoom d'entrée très léger.
-              const z = 0.97 + a * 0.03;
-              ctx.globalAlpha = a;
-              ctx.translate(W / 2, H / 2);
-              ctx.scale(z, z);
-              ctx.translate(-W / 2, -H / 2);
-              ctx.drawImage(nextCanvas, 0, 0);
-            } else {
-              // Carré/intermédiaire : fondu simple et propre.
-              ctx.globalAlpha = a;
-              ctx.drawImage(nextCanvas, 0, 0);
-            }
+            ctx.globalAlpha = a;
+            ctx.drawImage(nextCanvas, 0, 0, W, H);
             ctx.restore();
           }
         } else {
