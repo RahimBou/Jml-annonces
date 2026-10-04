@@ -1219,16 +1219,19 @@ function wrapStoryText(ctx, text, maxWidth, maxLines = 2) {
 
 function drawStoryPhoto(ctx, img, progress, W, H, direction = 1) {
   if (!img) return;
-  const scaleBase = Math.max(W / img.naturalWidth, H / img.naturalHeight);
-  const zoom = 1.02 + 0.055 * progress;
-  const sw = W / (scaleBase * zoom);
-  const sh = H / (scaleBase * zoom);
-  const maxX = Math.max(0, img.naturalWidth - sw);
-  const maxY = Math.max(0, img.naturalHeight - sh);
-  const px = direction > 0 ? progress : 1 - progress;
-  const sx = maxX * (0.12 + 0.76 * px);
-  const sy = maxY * (0.18 + 0.22 * progress);
-  ctx.drawImage(img, sx, sy, sw, sh, 0, 0, W, H);
+  // Mouvement très léger : on évite l'effet "zoom permanent" qui surcharge la Story.
+  const scaleBase = Math.min(W * 0.88 / img.naturalWidth, H * 0.58 / img.naturalHeight);
+  const zoom = 1 + 0.008 * progress;
+  const dw = img.naturalWidth * scaleBase * zoom;
+  const dh = img.naturalHeight * scaleBase * zoom;
+  const px = (W - dw) / 2 + direction * (progress - .5) * 10;
+  const py = 300 + (H * .46 - dh) / 2 + (progress - .5) * 6;
+  ctx.save();
+  ctx.shadowColor = "rgba(0,0,0,.18)";
+  ctx.shadowBlur = 28;
+  ctx.shadowOffsetY = 12;
+  ctx.drawImage(img, px, py, dw, dh);
+  ctx.restore();
 }
 
 function storyGradient(ctx, W, H) {
@@ -1310,43 +1313,47 @@ function drawStoryIntro(ctx, p, logo, W, H, progress) {
   ctx.fillRect(0, 0, W, H);
 }
 
-function drawStoryPhotoFrame(ctx, p, img, index, count, progress, W, H, logo) {
-  ctx.fillStyle = "#012517";
-  ctx.fillRect(0, 0, W, H);
+function drawStoryPhotoFrame(ctx, p, img, index, count, progress, W, H, logo, clear = true) {
+  // Nouvelle direction visuelle : fond uni, visuel central net, beaucoup moins d'éléments.
+  if (clear) {
+    ctx.fillStyle = "#f6f2e9";
+    ctx.fillRect(0, 0, W, H);
+  }
+
   drawStoryPhoto(ctx, img, progress, W, H, index % 2 ? -1 : 1);
-  storyGradient(ctx, W, H);
 
-  ctx.fillStyle = "#d0a64b";
+  // Barre supérieure très discrète.
+  ctx.fillStyle = "#17382f";
+  ctx.fillRect(0, 0, W, 132);
+  ctx.fillStyle = "#c6a15b";
   ctx.font = "bold 34px Georgia";
-  ctx.fillText("JML IMMOBILIER", 52, 74);
-
+  ctx.fillText("JML IMMOBILIER", 52, 60);
   ctx.fillStyle = "#fff";
-  ctx.font = "bold 25px Arial";
-  ctx.fillText("À VENDRE", 52, 116);
+  ctx.font = "bold 23px Arial";
+  ctx.fillText("À VENDRE", 52, 101);
 
-  ctx.fillStyle = "rgba(1,37,23,.86)";
+  // Informations essentielles uniquement.
+  ctx.fillStyle = "rgba(23,56,47,.96)";
   ctx.beginPath();
-  ctx.roundRect(38, H - 250, W - 76, 190, 30);
+  ctx.roundRect(38, H - 215, W - 76, 155, 24);
   ctx.fill();
 
-  ctx.fillStyle = "#d0a64b";
-  ctx.font = "bold 52px Georgia";
-  ctx.fillText(p.price || "Prix", 70, H - 160);
+  ctx.fillStyle = "#c6a15b";
+  ctx.font = "bold 46px Georgia";
+  ctx.fillText(p.price || "Prix", 68, H - 137);
 
   const specs = [p.surface || "", p.rooms ? p.rooms + " pièces" : "", p.bedrooms ? p.bedrooms + " chambres" : ""]
     .filter(Boolean).join(" · ");
   ctx.fillStyle = "#fff";
-  ctx.font = "bold 29px Arial";
-  if (specs) ctx.fillText(specs, 70, H - 112);
+  ctx.font = "bold 27px Arial";
+  if (specs) ctx.fillText(specs, 68, H - 91);
 
-  ctx.fillStyle = "#d0a64b";
-  ctx.font = "bold 23px Arial";
-  ctx.fillText("JML IMMOBILIER", 70, H - 73);
-
-  ctx.fillStyle = "rgba(255,255,255,.82)";
-  ctx.font = "bold 22px Arial";
-  ctx.textAlign = "right";
-  ctx.fillText(String(index + 1).padStart(2, "0") + " / " + String(count).padStart(2, "0"), W - 55, 74);
+  ctx.fillStyle = "rgba(23,56,47,.72)";
+  ctx.fillRect(W - 190, 146, 145, 42);
+  ctx.fillStyle = "#fff";
+  ctx.font = "bold 20px Arial";
+  ctx.textAlign = "center";
+  ctx.fillText(String(index + 1).padStart(2, "0") + " / " + String(count).padStart(2, "0"), W - 117, 175);
   ctx.textAlign = "left";
 }
 
@@ -1496,11 +1503,15 @@ async function createStoryVideo() {
           const photoElapsed = elapsed - introDuration;
           const index = Math.min(loaded.length - 1, Math.floor(photoElapsed / photoDuration));
           const local = (photoElapsed - index * photoDuration) / photoDuration;
-          const fade = Math.min(1, Math.min(local / .16, (1 - local) / .16));
-          drawStoryPhotoFrame(ctx, p, loaded[index], index, loaded.length, local, W, H, logo);
-          if (fade < 1 && index > 0) {
-            ctx.fillStyle = "rgba(1,37,23," + Math.max(0, 1 - fade) + ")";
-            ctx.fillRect(0, 0, W, H);
+          const fade = Math.min(1, Math.min(local / .22, (1 - local) / .22));
+          drawStoryPhotoFrame(ctx, p, loaded[index], index, loaded.length, local, W, H, logo, true);
+          // Transition = simple fondu croisé, sans bloc vert ni flash.
+          if (index < loaded.length - 1 && local > photoDuration - .22) {
+            const a = Math.min(1, Math.max(0, (local - (photoDuration - .22)) / .22));
+            ctx.save();
+            ctx.globalAlpha = a;
+            drawStoryPhotoFrame(ctx, p, loaded[index + 1], index + 1, loaded.length, 0, W, H, logo, false);
+            ctx.restore();
           }
         } else {
           drawStoryFinal(ctx, p, logo, W, H, (elapsed - (duration - finalDuration)) / finalDuration);
