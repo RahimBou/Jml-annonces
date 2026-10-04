@@ -184,8 +184,19 @@ $('volume').addEventListener('input',()=>$('volumeValue').textContent=$('volume'
 $('reset').addEventListener('click',()=>location.reload());
 
 function pickMime(){
-  const types=['video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm'];
+  // Prefer MP4 on mobile: Facebook/Instagram handle it much better than WebM.
+  const types=[
+    'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+    'video/mp4;codecs=avc1.42E01E',
+    'video/mp4',
+    'video/webm;codecs=vp9,opus',
+    'video/webm;codecs=vp8,opus',
+    'video/webm'
+  ];
   return types.find(t=>MediaRecorder.isTypeSupported(t))||'';
+}
+function videoExtension(mime){
+  return mime.includes('mp4') ? 'mp4' : 'webm';
 }
 
 async function createVideo(){
@@ -240,11 +251,12 @@ async function createVideo(){
     videoBlob=new Blob(chunks,{type:mime});
     if(videoUrl)URL.revokeObjectURL(videoUrl);
     videoUrl=URL.createObjectURL(videoBlob);
+    const ext=videoExtension(mime);
     $('video').src=videoUrl;$('video').style.display='block';$('canvas').style.display='none';
     $('download').disabled=false;$('share').disabled=false;
     $('result').style.display='block';
     $('generateStatus').className='status ok';$('generateStatus').textContent='✅ Vidéo créée.';
-    $('resultStatus').textContent='10 images · '+$('duration').value+' s/image · transitions '+$('transition').value+' s · '+(audioFile?'avec musique':'sans musique')+'.';
+    $('resultStatus').textContent='10 images · '+$('duration').value+' s/image · transitions '+$('transition').value+' s · '+(audioFile?'avec musique':'sans musique')+' · format '+videoExtension(mime).toUpperCase()+'.';
     $('result').scrollIntoView({behavior:'smooth'});
   }finally{
     if(source){try{source.stop()}catch{}}
@@ -260,18 +272,45 @@ $('generate').addEventListener('click',async()=>{
 });
 $('download').addEventListener('click',()=>{
   if(!videoBlob)return;
-  const a=document.createElement('a');a.href=videoUrl;a.download='JML_Ardennes_post_video.webm';a.click();
+  const a=document.createElement('a');a.href=videoUrl;a.download='JML_Ardennes_post_video.'+videoExtension(videoBlob.type);a.click();
 });
 $('share').addEventListener('click',async()=>{
   if(!videoBlob)return;
-  const file=new File([videoBlob],'JML_Ardennes_post_video.webm',{type:videoBlob.type});
+  const ext=videoExtension(videoBlob.type);
+  const file=new File([videoBlob],'JML_Ardennes_post_video.'+ext,{type:videoBlob.type});
   try{
     if(navigator.canShare && navigator.canShare({files:[file]})){
-      await navigator.share({title:'JML Immobilier',text:'Publication JML Immobilier',files:[file]});
-    }else{
-      $('resultStatus').textContent='📥 Le partage direct de fichier n’est pas disponible ici. Utilise Télécharger la vidéo.';
+      $('resultStatus').textContent='📤 Ouverture du partage…';
+      await navigator.share({
+        title:'JML Immobilier',
+        text:'Publication JML Immobilier',
+        files:[file]
+      });
+      $('resultStatus').className='status ok';
+      $('resultStatus').textContent='✅ Partage terminé.';
+      return;
     }
-  }catch(e){if(e.name!=='AbortError')$('resultStatus').textContent='Le partage a été annulé ou refusé.';}
+    // Some Android browsers expose share() but reject video files.
+    // Give the user a deterministic fallback instead of a misleading error.
+    const a=document.createElement('a');
+    a.href=videoUrl;
+    a.download='JML_Ardennes_post_video.'+ext;
+    a.click();
+    $('resultStatus').className='status';
+    $('resultStatus').textContent='📥 Partage de fichier non disponible sur ce navigateur. La vidéo a été téléchargée : ajoute-la ensuite dans Facebook.';
+  }catch(e){
+    if(e.name==='AbortError'){
+      $('resultStatus').className='status';
+      $('resultStatus').textContent='↩️ Partage fermé. La vidéo reste disponible avec « Télécharger la vidéo ».';
+      return;
+    }
+    const a=document.createElement('a');
+    a.href=videoUrl;
+    a.download='JML_Ardennes_post_video.'+ext;
+    a.click();
+    $('resultStatus').className='status';
+    $('resultStatus').textContent='📥 Facebook/navigateur a refusé le partage direct. La vidéo a été téléchargée automatiquement.';
+  }
 });
 </script>
 </body>
