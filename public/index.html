@@ -176,6 +176,23 @@
       <button id="generateStory" style="background:#b28b3f">🎬 Créer la Story</button>
       <button id="shareStory" style="background:#17382f" disabled>📤 Partager la Story</button>
     </div>
+
+    <div class="card" style="margin-top:14px;padding:14px;background:#f5f3ed;border:1px solid rgba(23,56,47,.12)">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+        <div>
+          <strong style="color:var(--green)">🎵 Bibliothèque sons JML</strong>
+          <div class="photo-meta">Ajoute tes propres musiques ou sons. Ils restent dans ce navigateur et peuvent être supprimés à tout moment.</div>
+        </div>
+        <label for="storyAudioUpload" class="button" style="background:#b28b3f;color:#fff;cursor:pointer">➕ Ajouter un son</label>
+        <input id="storyAudioUpload" type="file" accept="audio/*" multiple style="display:none">
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px">
+        <label style="font-size:14px"><input type="radio" name="storyAudio" value="" checked> 🔇 Sans musique</label>
+        <label style="font-size:14px">Volume <input id="storyAudioVolume" type="range" min="5" max="40" value="18" step="1"> <span id="storyAudioVolumeValue">18%</span></label>
+      </div>
+      <div id="storyAudioLibrary" style="display:grid;gap:8px;margin-top:12px"></div>
+      <div id="storyAudioStatus" class="photo-meta" style="margin-top:8px">Aucun son personnel ajouté.</div>
+    </div>
     <div id="storyStatus" class="photo-meta" style="margin-top:10px">La Story sera construite à partir des photos et informations vérifiées de l'annonce.</div>
     <div class="story-preview" style="margin-top:14px">
       <canvas id="storyCanvas" width="1080" height="1920"></canvas>
@@ -200,7 +217,153 @@ const $ = (id) => document.getElementById(id);
 let currentData = null;
 let currentStoryBlob = null;
 let currentStoryUrl = null;
+let selectedStoryAudioId = "";
+let storyAudioDbPromise = null;
 
+
+/* Bibliothèque audio locale JML — IndexedDB, sans dépendance serveur */
+function storyAudioDb() {
+  if (storyAudioDbPromise) return storyAudioDbPromise;
+  storyAudioDbPromise = new Promise((resolve, reject) => {
+    if (!window.indexedDB) return reject(new Error("Le stockage audio local n'est pas disponible sur ce navigateur."));
+    const request = indexedDB.open("jml-annonces-audio", 1);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains("sounds")) db.createObjectStore("sounds", { keyPath: "id" });
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error || new Error("Impossible d'ouvrir la bibliothèque audio."));
+  });
+  return storyAudioDbPromise;
+}
+
+async function storyAudioPut(file) {
+  const db = await storyAudioDb();
+  const id = (crypto.randomUUID ? crypto.randomUUID() : Date.now() + "-" + Math.random());
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction("sounds", "readwrite");
+    tx.objectStore("sounds").put({ id, name: file.name, type: file.type || "audio/mpeg", size: file.size, blob: file, createdAt: Date.now() });
+    tx.oncomplete = resolve;
+    tx.onerror = () => reject(tx.error || new Error("Impossible d'enregistrer ce son."));
+  });
+  return id;
+}
+
+async function storyAudioList() {
+  const db = await storyAudioDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction("sounds", "readonly");
+    const req = tx.objectStore("sounds").getAll();
+    req.onsuccess = () => resolve((req.result || []).sort((a,b) => a.createdAt - b.createdAt));
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function storyAudioGet(id) {
+  const db = await storyAudioDb();
+  return new Promise((resolve, reject) => {
+    const req = db.transaction("sounds", "readonly").objectStore("sounds").get(id);
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function storyAudioDelete(id) {
+  const db = await storyAudioDb();
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction("sounds", "readwrite");
+    tx.objectStore("sounds").delete(id);
+    tx.oncomplete = resolve;
+    tx.onerror = () => reject(tx.error || new Error("Impossible de supprimer ce son."));
+  });
+  if (selectedStoryAudioId === id) {
+    selectedStoryAudioId = "";
+    document.querySelector('input[name="storyAudio"][value=""]')?.click();
+  }
+  renderStoryAudioLibrary();
+}
+
+function formatAudioSize(bytes) {
+  if (!bytes) return "";
+  return bytes < 1024 * 1024 ? Math.round(bytes / 1024) + " Ko" : (bytes / 1024 / 1024).toFixed(1) + " Mo";
+}
+
+async function renderStoryAudioLibrary() {
+  const box = $("storyAudioLibrary");
+  if (!box) return;
+  try {
+    const sounds = await storyAudioList();
+    box.innerHTML = "";
+    sounds.forEach(sound => {
+      const row = document.createElement("div");
+      row.style.cssText = "display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:9px 10px;border-radius:10px;background:#fff;border:1px solid rgba(23,56,47,.12)";
+      const radio = document.createElement("input");
+      radio.type = "radio";
+      radio.name = "storyAudio";
+      radio.value = sound.id;
+      radio.checked = selectedStoryAudioId === sound.id;
+      radio.addEventListener("change", () => {
+        selectedStoryAudioId = sound.id;
+        $("storyAudioStatus").textContent = "🎵 Son sélectionné : " + sound.name;
+      });
+      const label = document.createElement("span");
+      label.textContent = sound.name + " · " + formatAudioSize(sound.size);
+      label.style.cssText = "flex:1;min-width:180px;font-size:14px";
+      const play = document.createElement("audio");
+      play.controls = true;
+      play.preload = "metadata";
+      play.src = URL.createObjectURL(sound.blob);
+      play.style.cssText = "height:34px;max-width:260px";
+      const del = document.createElement("button");
+      del.type = "button";
+      del.textContent = "🗑️ Supprimer";
+      del.style.cssText = "background:#7b2d2d;color:#fff;border:0;border-radius:8px;padding:8px 10px;cursor:pointer";
+      del.addEventListener("click", async () => {
+        if (!confirm("Supprimer le son « " + sound.name + " » ?")) return;
+        try { await storyAudioDelete(sound.id); }
+        catch (error) { $("storyAudioStatus").textContent = "🔴 " + (error.message || "Suppression impossible."); }
+      });
+      row.append(radio, label, play, del);
+      box.appendChild(row);
+    });
+    $("storyAudioStatus").textContent = sounds.length
+      ? "🎵 " + sounds.length + " son(s) disponible(s). Sélectionne celui à intégrer dans la prochaine Story."
+      : "Aucun son personnel ajouté.";
+  } catch (error) {
+    $("storyAudioStatus").textContent = "🔴 " + (error.message || "Bibliothèque audio indisponible.");
+  }
+}
+
+async function initStoryAudioLibrary() {
+  const upload = $("storyAudioUpload");
+  const volume = $("storyAudioVolume");
+  if (!upload) return;
+  upload.addEventListener("change", async () => {
+    const files = Array.from(upload.files || []);
+    if (!files.length) return;
+    try {
+      for (const file of files) {
+        if (!file.type.startsWith("audio/")) continue;
+        if (file.size > 30 * 1024 * 1024) {
+          throw new Error("« " + file.name + " » dépasse 30 Mo.");
+        }
+        await storyAudioPut(file);
+      }
+      $("storyAudioStatus").textContent = "🟢 Son(s) ajouté(s) à ta bibliothèque JML.";
+      await renderStoryAudioLibrary();
+    } catch (error) {
+      $("storyAudioStatus").textContent = "🔴 " + (error.message || "Ajout impossible.");
+    } finally {
+      upload.value = "";
+    }
+  });
+  volume.addEventListener("input", () => $("storyAudioVolumeValue").textContent = volume.value + "%");
+  document.querySelector('input[name="storyAudio"][value=""]')?.addEventListener("change", () => {
+    selectedStoryAudioId = "";
+    $("storyAudioStatus").textContent = "🔇 La prochaine Story sera créée sans musique.";
+  });
+  await renderStoryAudioLibrary();
+}
 
 function propertyType(title) {
   const m = String(title || "").match(/^(Appartement|Maison|Pavillon|Terrain|Garage|Immeuble|Local commercial|Local|Studio|Duplex|Loft)/i);
@@ -1016,7 +1179,7 @@ $("copyInstagram").addEventListener("click", () => copySocialText("instagram"));
 $("copyLinkedin").addEventListener("click", () => copySocialText("linkedin"));
 /* Story vidéo 9:16 — version JML plus éditoriale */
 function storyMimeType() {
-  const candidates = ["video/webm;codecs=vp9","video/webm;codecs=vp8","video/webm"];
+  const candidates = ["video/webm;codecs=vp9,opus","video/webm;codecs=vp8,opus","video/webm;codecs=vp9","video/webm;codecs=vp8","video/webm"];
   return candidates.find(type => MediaRecorder.isTypeSupported(type)) || "";
 }
 
@@ -1261,7 +1424,35 @@ async function createStoryVideo() {
     currentStoryBlob = null;
 
     const stream = canvas.captureStream(fps);
-    const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 6000000 });
+    let audioContext = null;
+    let audioSource = null;
+    let audioGain = null;
+    let audioDestination = null;
+
+    if (selectedStoryAudioId) {
+      const sound = await storyAudioGet(selectedStoryAudioId);
+      if (!sound?.blob) throw new Error("Le son sélectionné n'est plus disponible.");
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) throw new Error("Ce navigateur ne permet pas d'intégrer une piste audio.");
+      audioContext = new AudioCtx();
+      await audioContext.resume();
+      const audioBuffer = await audioContext.decodeAudioData(await sound.blob.arrayBuffer());
+      audioSource = audioContext.createBufferSource();
+      audioSource.buffer = audioBuffer;
+      audioSource.loop = true;
+      audioGain = audioContext.createGain();
+      audioGain.gain.value = Math.max(0.05, Number($("storyAudioVolume")?.value || 18) / 100);
+      audioDestination = audioContext.createMediaStreamDestination();
+      audioSource.connect(audioGain);
+      audioGain.connect(audioDestination);
+      audioDestination.stream.getAudioTracks().forEach(track => stream.addTrack(track));
+    }
+
+    const recorder = new MediaRecorder(stream, {
+      mimeType,
+      videoBitsPerSecond: 6000000,
+      audioBitsPerSecond: selectedStoryAudioId ? 128000 : undefined
+    });
     const chunks = [];
     recorder.ondataavailable = e => { if (e.data?.size) chunks.push(e.data); };
     const recordingDone = new Promise((resolve, reject) => {
@@ -1275,6 +1466,7 @@ async function createStoryVideo() {
     const photoDuration = (duration - introDuration - finalDuration) / loaded.length;
 
     recorder.start(100);
+    if (audioSource) audioSource.start(0);
     const start = performance.now();
 
     await new Promise(resolve => {
@@ -1306,7 +1498,13 @@ async function createStoryVideo() {
     });
 
     recorder.stop();
+    if (audioSource) {
+      try { audioSource.stop(); } catch {}
+    }
     const blob = await recordingDone;
+    if (audioContext) {
+      try { await audioContext.close(); } catch {}
+    }
     if (!blob || blob.size < 1000) throw new Error("La vidéo générée est vide.");
 
     currentStoryBlob = blob;
@@ -1419,6 +1617,7 @@ async function shareStoryVideo() {
   }
 }
 
+initStoryAudioLibrary();
 $("generateStory").addEventListener("click", createStoryVideo);
 $("shareStory").addEventListener("click", shareStoryVideo);
 $("downloadStory").addEventListener("click", downloadStoryFile);
