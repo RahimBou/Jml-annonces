@@ -50,6 +50,37 @@ canvas,video{width:100%;max-width:360px;display:block;background:#111;border-rad
 <select id="transition"><option value="0.35">Douce</option><option value="0.55" selected>Fluide</option><option value="0.8">Lente</option></select></label>
 </div>
 <div class="option">
+<b>✨ Habillage professionnel JML</b>
+<div class="muted" style="font-size:13px">Ces éléments apparaissent sur chaque image : accroche en haut et coordonnées en bas. Le numéro de téléphone est volontairement personnalisable.</div>
+<div class="row" style="margin-top:10px">
+  <label style="flex:1;min-width:220px">Mot(s) impactant en haut
+    <input id="headline" type="text" value="INVESTIR · VALORISER · PRÉPARER L'AVENIR" maxlength="55" style="width:100%;margin-top:5px;padding:10px;border:1px solid #cfc8b7;border-radius:9px">
+  </label>
+  <label style="flex:1;min-width:220px">Sous-accroche
+    <input id="subheadline" type="text" value="Votre projet immobilier dans les Ardennes" maxlength="70" style="width:100%;margin-top:5px;padding:10px;border:1px solid #cfc8b7;border-radius:9px">
+  </label>
+</div>
+<div class="row" style="margin-top:10px">
+  <label style="flex:1;min-width:180px">Nom
+    <input id="contactName" type="text" value="Abderrahim Boujnikh" maxlength="45" style="width:100%;margin-top:5px;padding:10px;border:1px solid #cfc8b7;border-radius:9px">
+  </label>
+  <label style="flex:1;min-width:240px">Fonction
+    <input id="contactRole" type="text" value="Agent commercial indépendant en immobilier" maxlength="55" style="width:100%;margin-top:5px;padding:10px;border:1px solid #cfc8b7;border-radius:9px">
+  </label>
+  <label style="flex:1;min-width:160px">Téléphone
+    <input id="contactPhone" type="tel" placeholder="06 XX XX XX XX" maxlength="20" style="width:100%;margin-top:5px;padding:10px;border:1px solid #cfc8b7;border-radius:9px">
+  </label>
+</div>
+<div class="row" style="margin-top:10px">
+  <label style="flex:1;min-width:220px">Appel à l'action
+    <input id="contactCta" type="text" value="Parlons de votre projet" maxlength="45" style="width:100%;margin-top:5px;padding:10px;border:1px solid #cfc8b7;border-radius:9px">
+  </label>
+  <label style="flex:1;min-width:220px">Secteur
+    <input id="contactArea" type="text" value="Ardennes · Charleville-Mézières" maxlength="45" style="width:100%;margin-top:5px;padding:10px;border:1px solid #cfc8b7;border-radius:9px">
+  </label>
+</div>
+</div>
+<div class="option">
 <b>🎵 Musique (facultative)</b>
 <div class="muted" style="font-size:13px">La musique est traitée localement dans ton navigateur et n'est pas envoyée au serveur.</div>
 <input id="audioInput" type="file" accept="audio/*" style="margin-top:8px">
@@ -104,10 +135,11 @@ function drawCover(ctx,img,w,h){
   ctx.drawImage(img,(w-nw)/2,(h-nh)/2,nw,nh);
 }
 
-function drawContain(ctx,img,w,h){
-  const s=Math.min((w-42)/img.width,(h-72)/img.height);
+function drawContainRegion(ctx,img,w,x0,y0,x1,y1){
+  const regionW=x1-x0,regionH=y1-y0;
+  const s=Math.min((regionW-28)/img.width,(regionH-28)/img.height);
   const nw=img.width*s,nh=img.height*s;
-  const x=(w-nw)/2,y=(h-nh)/2;
+  const x=x0+(regionW-nw)/2,y=y0+(regionH-nh)/2;
   ctx.drawImage(img,x,y,nw,nh);
   ctx.save();
   ctx.strokeStyle='#c6a15b';ctx.lineWidth=3;
@@ -115,19 +147,101 @@ function drawContain(ctx,img,w,h){
   ctx.restore();
 }
 
+function fitText(ctx,text,maxWidth,maxSize,minSize=20,font='Arial'){
+  let size=maxSize;
+  while(size>minSize){
+    ctx.font='800 '+size+'px Arial';
+    if(ctx.measureText(text).width<=maxWidth) return size;
+    size-=2;
+  }
+  return minSize;
+}
+
 function drawSlide(ctx,slide,t){
   const {img}=slide,w=ctx.canvas.width,h=ctx.canvas.height;
+  const topH=150,bottomH=190;
   ctx.clearRect(0,0,w,h);
-  drawCover(ctx,img,w,h);
-  ctx.fillStyle='rgba(9,31,25,.34)';ctx.fillRect(0,0,w,h);
-  // Subtle slow zoom on the original visual without cropping it.
+
+  // Fond discret : l'image reste uniquement dans la zone centrale.
+  ctx.fillStyle='#f6f2e9';ctx.fillRect(0,0,w,h);
   ctx.save();
-  const scale=1+0.012*t;
-  const nw=w*scale,nh=h*scale;
-  ctx.globalAlpha=0.06;
-  ctx.drawImage(img,(w-nw)/2,(h-nh)/2,nw,nh);
+  ctx.globalAlpha=.18;
+  drawCover(ctx,img,w,h);
+  ctx.fillStyle='#17382f';ctx.fillRect(0,0,w,h);
   ctx.restore();
-  drawContain(ctx,img,w,h);
+
+  const scale=1+0.008*t;
+  const regionW=w-44,regionY=topH+10,regionH=h-topH-bottomH-20;
+  const s=Math.min((regionW-28)/img.width,(regionH-28)/img.height)*scale;
+  const nw=img.width*s,nh=img.height*s;
+  const x=(w-nw)/2,y=regionY+(regionH-nh)/2;
+  ctx.save();
+  ctx.shadowColor='rgba(0,0,0,.22)';ctx.shadowBlur=22;ctx.shadowOffsetY=8;
+  ctx.drawImage(img,x,y,nw,nh);
+  ctx.restore();
+  ctx.save();
+  ctx.strokeStyle='#c6a15b';ctx.lineWidth=3;ctx.strokeRect(x-2,y-2,nw+4,nh+4);
+  ctx.restore();
+
+  const headline=String($('headline')?.value||'').trim();
+  const sub=String($('subheadline')?.value||'').trim();
+  const name=String($('contactName')?.value||'').trim();
+  const role=String($('contactRole')?.value||'').trim();
+  const phone=String($('contactPhone')?.value||'').trim();
+  const cta=String($('contactCta')?.value||'').trim();
+  const area=String($('contactArea')?.value||'').trim();
+
+  // Bandeau haut : impactant mais court.
+  ctx.fillStyle='rgba(23,56,47,.97)';
+  ctx.fillRect(0,0,w,topH);
+  if(headline){
+    ctx.fillStyle='#c6a15b';
+    const fs=fitText(ctx,headline,w-70,35,22);
+    ctx.font='800 '+fs+'px Arial';
+    ctx.textAlign='center';
+    ctx.fillText(headline,w/2,53);
+  }
+  if(sub){
+    ctx.fillStyle='#fff';
+    const fs=fitText(ctx,sub,w-70,22,16);
+    ctx.font='600 '+fs+'px Arial';
+    ctx.fillText(sub,w/2,91);
+  }
+  ctx.fillStyle='rgba(198,161,91,.35)';
+  ctx.fillRect(60,112,w-120,2);
+  ctx.fillStyle='#fff';
+  ctx.font='700 15px Arial';
+  ctx.fillText(area||'JML Immobilier',w/2,137);
+  ctx.textAlign='left';
+
+  // Bandeau bas : identité + fonction + téléphone + CTA.
+  ctx.fillStyle='rgba(23,56,47,.98)';
+  ctx.fillRect(0,h-bottomH,w,bottomH);
+  ctx.fillStyle='#c6a15b';
+  ctx.font='800 25px Georgia';
+  ctx.fillText(name||'JML Immobilier',32,h-bottomH+42);
+  ctx.fillStyle='#fff';
+  ctx.font='600 17px Arial';
+  ctx.fillText(role||'Agent commercial en immobilier',32,h-bottomH+70);
+
+  if(phone){
+    ctx.fillStyle='#c6a15b';
+    ctx.font='800 24px Arial';
+    ctx.fillText('☎ '+phone,32,h-bottomH+108);
+  }
+  if(cta){
+    ctx.fillStyle='#fff';
+    ctx.font='800 19px Arial';
+    ctx.fillText(cta,32,h-bottomH+140);
+  }
+  ctx.fillStyle='#c6a15b';
+  ctx.font='700 15px Arial';
+  ctx.fillText('JML IMMOBILIER',w-190,h-bottomH+42);
+
+  // Petit repère visuel.
+  ctx.fillStyle='rgba(255,255,255,.8)';
+  ctx.font='14px Arial';
+  ctx.fillText('VOTRE PROJET, NOTRE ENGAGEMENT',w-300,h-bottomH+70);
 }
 
 async function readZip(file){
