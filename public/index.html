@@ -1421,27 +1421,27 @@ function drawStoryPhotoFrame(ctx, p, img, index, count, progress, W, H, logo, cl
 
   const topH = 205;
   const bottomH = 260;
-  const regionY = topH + 12;
-  const regionH = H - topH - bottomH - 24;
+  // La photo occupe toute la largeur de la zone centrale : aucun cadre crème,
+  // aucun espace blanc autour des photos pendant les changements.
+  const regionY = topH;
+  const regionH = H - topH - bottomH;
 
-  // Photo originale entière, avec un mouvement très léger.
-  const baseScale = Math.min((W - 64) / img.naturalWidth, (regionH - 28) / img.naturalHeight);
-  const scale = baseScale * (1 + 0.007 * progress);
+  // Mode "cover" : on remplit toute la zone, puis on recadre légèrement si
+  // le ratio de la photo diffère du 9:16. Cela évite l'effet "photo posée
+  // au milieu d'une page blanche" visible sur certaines annonces.
+  const coverScale = Math.max(W / img.naturalWidth, regionH / img.naturalHeight);
+  const scale = coverScale * (1 + 0.007 * progress);
   const dw = img.naturalWidth * scale;
   const dh = img.naturalHeight * scale;
   const px = (W - dw) / 2 + (index % 2 ? -1 : 1) * (progress - .5) * 5;
   const py = regionY + (regionH - dh) / 2;
 
   ctx.save();
-  ctx.shadowColor = "rgba(0,0,0,.18)";
-  ctx.shadowBlur = 22;
-  ctx.shadowOffsetY = 8;
+  ctx.beginPath();
+  ctx.rect(0, regionY, W, regionH);
+  ctx.clip();
   ctx.drawImage(img, px, py, dw, dh);
   ctx.restore();
-
-  ctx.strokeStyle = "#c6a15b";
-  ctx.lineWidth = 3;
-  ctx.strokeRect(px - 2, py - 2, dw + 4, dh + 4);
 
   const headline = String($("storyHeadline")?.value || "UN BIEN QUI MÉRITE LE DÉTOUR").trim();
   const sub = String($("storySubheadline")?.value || "Découvrez ce que ce bien peut vous offrir").trim();
