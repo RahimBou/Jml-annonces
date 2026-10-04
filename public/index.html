@@ -171,7 +171,7 @@
     <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
       <div>
         <h2 style="margin:0;color:var(--green)">🎬 Story vidéo JML — nouvelle version</h2>
-        <div class="photo-meta">15 secondes · 9:16 · photos originales vérifiées · intro, découverte du bien et écran final.</div>
+        <div class="photo-meta">13 secondes · 9:16 · photos originales vérifiées · intro, découverte du bien et écran final.</div>
       </div>
       <span class="story-badge">🔒 Photos originales uniquement</span>
     </div>
@@ -1566,7 +1566,7 @@ async function createStoryVideo() {
     const ctx = canvas.getContext("2d", { alpha: false });
     const W = 1080, H = 1920, fps = 30;
     const speed = Math.max(0.5, Math.min(2, Number($("storySpeed")?.value || 1)));
-    const duration = 15 / speed;
+    const duration = 13 / speed;
     const mimeType = storyMimeType();
     if (!mimeType) throw new Error("Aucun format vidéo compatible n'est disponible sur ce navigateur.");
 
@@ -1621,13 +1621,13 @@ async function createStoryVideo() {
     const photoWeights = loaded.map((img, index) => {
       const ratio = img.naturalWidth / Math.max(1, img.naturalHeight);
       let weight;
-      if (ratio >= 1.35) weight = 1.38;      // paysage : lecture plus confortable
-      else if (ratio <= 0.80) weight = 0.78; // portrait : plus dynamique
-      else weight = 1.00;                    // carré/intermédiaire
-      if (index === 0) weight *= 1.10;       // première photo : accroche
-      if (index === loaded.length - 1) weight *= 0.88;
-      if (paceMode === "dynamic") weight *= 0.86;
-      if (paceMode === "calm") weight *= 1.16;
+      if (ratio >= 1.35) weight = 1.48;      // paysage : on laisse lire la pièce
+      else if (ratio <= 0.80) weight = 0.72; // portrait : passage plus nerveux
+      else weight = 0.95;                    // carré/intermédiaire
+      if (index === 0) weight *= 1.12;       // accroche
+      if (index === loaded.length - 1) weight *= 0.86;
+      if (paceMode === "dynamic") weight *= 0.82;
+      if (paceMode === "calm") weight *= 1.12;
       return weight;
     });
     const totalPhotoWeight = photoWeights.reduce((sum, weight) => sum + weight, 0);
@@ -1669,14 +1669,15 @@ async function createStoryVideo() {
 
           drawStoryPhotoFrame(ctx, p, loaded[index], index, loaded.length, local, W, H, logo, true);
 
-          // Vraie transition douce : chaque photo possède une transition adaptée.
-          // On évite les superpositions longues qui donnaient un effet "moche".
+          // Transition propre : on rend chaque image complète dans un canvas
+          // séparé avant de l'animer. Ainsi les bandeaux et la photo ne se mélangent
+          // plus de façon sale pendant le passage d'une image à l'autre.
           const ratio = loaded[index].naturalWidth / Math.max(1, loaded[index].naturalHeight);
           const transitionStyle = ratio >= 1.35 ? "slide" : (ratio <= 0.80 ? "zoom" : "fade");
           const transitionDuration = Math.min(
-            transitionStyle === "slide" ? 0.48 : 0.34,
-            currentDuration * 0.20,
-            index < photoDurations.length - 1 ? photoDurations[index + 1] * 0.20 : 0.34
+            transitionStyle === "slide" ? 0.46 : 0.38,
+            currentDuration * 0.22,
+            index < photoDurations.length - 1 ? photoDurations[index + 1] * 0.22 : 0.38
           );
 
           if (index < loaded.length - 1 && local > 1 - (transitionDuration / currentDuration)) {
@@ -1685,22 +1686,32 @@ async function createStoryVideo() {
               (transitionDuration / currentDuration);
             const a = Math.max(0, Math.min(1, transitionProgress));
 
+            const nextCanvas = document.createElement("canvas");
+            nextCanvas.width = W;
+            nextCanvas.height = H;
+            const nextCtx = nextCanvas.getContext("2d", { alpha: false });
+            drawStoryPhotoFrame(nextCtx, p, loaded[index + 1], index + 1, loaded.length, 0, W, H, logo, true);
+
             ctx.save();
             if (transitionStyle === "slide") {
-              // Paysage : léger glissement latéral, plus élégant qu'un fondu rapide.
-              ctx.globalAlpha = a;
-              ctx.translate((1 - a) * 55, 0);
+              // La prochaine photo arrive doucement depuis la droite.
+              ctx.globalAlpha = 1;
+              ctx.drawImage(nextCanvas, (1 - a) * W * 0.12, 0, W, H);
+              ctx.fillStyle = "rgba(246,242,233," + (1 - a) * 0.12 + ")";
+              ctx.fillRect(0, 0, W, H);
             } else if (transitionStyle === "zoom") {
-              // Portrait : petit zoom d'entrée.
-              const z = 0.985 + a * 0.015;
+              // Portrait : zoom d'entrée très léger.
+              const z = 0.97 + a * 0.03;
+              ctx.globalAlpha = a;
               ctx.translate(W / 2, H / 2);
               ctx.scale(z, z);
               ctx.translate(-W / 2, -H / 2);
-              ctx.globalAlpha = a;
+              ctx.drawImage(nextCanvas, 0, 0);
             } else {
+              // Carré/intermédiaire : fondu simple et propre.
               ctx.globalAlpha = a;
+              ctx.drawImage(nextCanvas, 0, 0);
             }
-            drawStoryPhotoFrame(ctx, p, loaded[index + 1], index + 1, loaded.length, 0, W, H, logo, false);
             ctx.restore();
           }
         } else {
