@@ -48,6 +48,13 @@
     .photo-partial { background:#fff6df; border-color:#ead39a; color:#745b1c; }
     .photo-status { display:inline-flex; align-items:center; gap:6px; margin-top:10px; padding:6px 10px; border-radius:999px; font-size:12px; font-weight:800; }
     .photo-details { margin-top:8px; font-size:11px; color:var(--muted); }
+
+    .story-controls { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:14px; }
+    .story-preview { background:#151515; border-radius:16px; padding:12px; text-align:center; }
+    #storyCanvas { width:min(100%,360px); height:auto; max-height:70vh; background:#111; border-radius:12px; box-shadow:0 8px 30px rgba(0,0,0,.22); }
+    .story-badge { display:inline-flex; align-items:center; gap:7px; padding:7px 11px; border-radius:999px; background:#f5f2e9; color:var(--green); font-size:12px; font-weight:800; }
+    @media (max-width:800px) { .story-controls { grid-template-columns:1fr; } }
+
     @media (max-width:800px) {
       .row, .grid { display:block; }
       button { margin-top:10px; width:100%; }
@@ -59,7 +66,7 @@
   <header>
     <div class="wrap">
       <div class="brand">JML Immobilier</div>
-      <div class="tagline">Annonces Auto — génération de publications à partir des vraies annonces JML · v0.8.0</div>
+      <div class="tagline">Annonces Auto — publications & Stories vidéo à partir des vraies annonces JML · v0.9.0</div>
     </div>
   </header>
 
@@ -156,6 +163,28 @@
     </div>
   </section>
 
+
+  <section id="storySection" class="card" style="display:none;margin-top:20px">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+      <div>
+        <h2 style="margin:0;color:var(--green)">🎬 Story vidéo JML</h2>
+        <div class="photo-meta">Format vertical 9:16 · photos originales uniquement · durée courte pour Facebook / Instagram.</div>
+      </div>
+      <span class="story-badge">🔒 Aucune photo IA</span>
+    </div>
+    <div class="story-controls">
+      <button id="generateStory" style="background:#b28b3f">🎬 Créer la Story vidéo</button>
+      <button id="shareStory" style="background:#17382f" disabled>📤 Partager la Story</button>
+    </div>
+    <div id="storyStatus" class="photo-meta" style="margin-top:10px">La vidéo sera créée à partir des photos vérifiées de l'annonce.</div>
+    <div class="story-preview" style="margin-top:14px">
+      <canvas id="storyCanvas" width="1080" height="1920"></canvas>
+      <video id="storyVideo" controls playsinline style="display:none;width:min(100%,360px);max-height:70vh;border-radius:12px;background:#111;margin:auto"></video>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px">
+      <button id="downloadStory" style="background:#6f746f" disabled>⬇️ Télécharger la Story vidéo</button>
+    </div>
+  </section>
   <section id="visualSection" class="card" style="display:none;margin-top:20px">
     <div class="visual-actions" style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px">
       <h2 style="margin:0;color:var(--green)">Visuel JML généré</h2>
@@ -169,6 +198,8 @@
 <script>
 const $ = (id) => document.getElementById(id);
 let currentData = null;
+let currentStoryBlob = null;
+let currentStoryUrl = null;
 
 
 function propertyType(title) {
@@ -558,6 +589,7 @@ async function renderJmlTemplate() {
   // requires the Gemini/data-controller plan before generating any text.
   $("socialSection").style.display="block";
   $("shareSection").style.display="block";
+  $("storySection").style.display="block";
 }
 
 $("load").addEventListener("click", async () => {
@@ -982,6 +1014,98 @@ $("shareLinkedin").addEventListener("click", async () => {
 $("copyFacebook").addEventListener("click", () => copySocialText("facebook"));
 $("copyInstagram").addEventListener("click", () => copySocialText("instagram"));
 $("copyLinkedin").addEventListener("click", () => copySocialText("linkedin"));
+/* Story vidéo 9:16 — photos originales uniquement */
+function storyMimeType() {
+  const candidates=["video/webm;codecs=vp9","video/webm;codecs=vp8","video/webm"];
+  return candidates.find(type => MediaRecorder.isTypeSupported(type)) || "";
+}
+function wrapStoryText(ctx,text,maxWidth,maxLines=2){
+  const words=String(text||"").trim().split(/\s+/).filter(Boolean), lines=[]; let line="";
+  for(const word of words){
+    const candidate=line?line+" "+word:word;
+    if(ctx.measureText(candidate).width<=maxWidth) line=candidate;
+    else if(line){lines.push(line);line=word;} else {lines.push(word);line="";}
+    if(lines.length===maxLines) break;
+  }
+  if(line&&lines.length<maxLines) lines.push(line);
+  return lines;
+}
+function drawStoryPhoto(ctx,img,progress,W,H){
+  if(!img)return;
+  const scaleBase=Math.max(W/img.naturalWidth,H/img.naturalHeight);
+  const zoom=1.02+0.08*progress, sw=W/(scaleBase*zoom), sh=H/(scaleBase*zoom);
+  const maxX=Math.max(0,img.naturalWidth-sw), maxY=Math.max(0,img.naturalHeight-sh);
+  const sx=maxX*(0.25+0.5*progress), sy=maxY*(0.15+0.25*progress);
+  ctx.drawImage(img,sx,sy,sw,sh,0,0,W,H);
+}
+async function createStoryVideo(){
+  if(!currentData?.listing){alert("Récupère d'abord une annonce JML.");return;}
+  if(currentData.photoPolicy?.publishAllowedForPhotoTest!==true){alert("La galerie doit être complète et vérifiée avant de créer la Story.");return;}
+  if(!window.MediaRecorder){alert("Ce navigateur ne permet pas la création vidéo locale.");return;}
+  const button=$("generateStory"), shareButton=$("shareStory"), downloadButton=$("downloadStory"), status=$("storyStatus");
+  button.disabled=true; shareButton.disabled=true; downloadButton.disabled=true; status.textContent="⏳ Préparation des photos originales…";
+  try{
+    const p=currentData.listing;
+    const urls=(Array.isArray(p.aiPlan?.photoOrder)?p.aiPlan.photoOrder:(p.images||[]).map((_,i)=>i)).map(i=>p.images?.[i]).filter(Boolean).slice(0,8);
+    const loaded=(await Promise.all(urls.map(loadCanvasImage))).filter(Boolean);
+    if(!loaded.length) throw new Error("Aucune photo originale exploitable.");
+    const canvas=$("storyCanvas"), ctx=canvas.getContext("2d",{alpha:false}), W=1080,H=1920,fps=30,duration=15,mimeType=storyMimeType();
+    if(!mimeType) throw new Error("Aucun format vidéo compatible n'est disponible sur ce navigateur.");
+    if(currentStoryUrl)URL.revokeObjectURL(currentStoryUrl); currentStoryBlob=null;
+    const stream=canvas.captureStream(fps), recorder=new MediaRecorder(stream,{mimeType,videoBitsPerSecond:6000000}), chunks=[];
+    recorder.ondataavailable=e=>{if(e.data?.size)chunks.push(e.data);};
+    const recordingDone=new Promise((resolve,reject)=>{recorder.onstop=()=>resolve(new Blob(chunks,{type:mimeType}));recorder.onerror=e=>reject(e.error||new Error("Erreur d'enregistrement vidéo."));});
+    const logo=await loadLocalCanvasImage("/jml-logo-officiel.svg"), ref=p.reference||"annonce", title=propertyType(p.title), location=String(p.location||"").replace(/\s*\(\d{5}\)/,"").trim();
+    const specs=[p.surface||"",p.rooms?p.rooms+" pièces":"",p.bedrooms?p.bedrooms+" chambres":""].filter(Boolean).join(" · ");
+    recorder.start(100);
+    const start=performance.now();
+    await new Promise(resolve=>{
+      const draw=now=>{
+        const elapsed=now-start,t=Math.min(1,elapsed/(duration*1000)),segment=Math.min(loaded.length-1,Math.floor(t*loaded.length)),local=t*loaded.length-segment,fade=Math.min(1,Math.min(local/0.12,(1-local)/0.12));
+        ctx.fillStyle="#012517";ctx.fillRect(0,0,W,H);drawStoryPhoto(ctx,loaded[segment],local,W,H);
+        let g=ctx.createLinearGradient(0,0,0,620);g.addColorStop(0,"rgba(0,0,0,.70)");g.addColorStop(1,"rgba(0,0,0,0)");ctx.fillStyle=g;ctx.fillRect(0,0,W,620);
+        g=ctx.createLinearGradient(0,H-720,0,H);g.addColorStop(0,"rgba(0,0,0,0)");g.addColorStop(1,"rgba(0,0,0,.78)");ctx.fillStyle=g;ctx.fillRect(0,H-720,W,720);
+        if(fade<1){ctx.fillStyle="rgba(1,37,23,"+Math.max(0,1-fade)+")";ctx.fillRect(0,0,W,H);}
+        ctx.fillStyle="#d0a64b";ctx.font="bold 48px Georgia";ctx.textAlign="left";ctx.fillText("JML IMMOBILIER",60,92);
+        ctx.fillStyle="#fff";ctx.font="bold 76px Georgia";ctx.fillText("À VENDRE",60,205);
+        ctx.fillStyle="#d0a64b";ctx.font="bold 44px Arial";ctx.fillText(title,60,275);
+        ctx.fillStyle="#fff";ctx.font="bold 42px Arial";wrapStoryText(ctx,location||"Ardennes",900,2).forEach((line,i)=>ctx.fillText(line,60,345+i*52));
+        ctx.fillStyle="rgba(1,37,23,.90)";ctx.beginPath();ctx.roundRect(45,H-620,W-90,535,34);ctx.fill();
+        ctx.fillStyle="#d0a64b";ctx.font="bold 62px Georgia";ctx.fillText(p.price||"Prix",80,H-500);
+        ctx.fillStyle="#fff";ctx.font="bold 34px Arial";if(specs)ctx.fillText(specs,80,H-438);
+        const highlights=(Array.isArray(p.aiPlan?.highlights)?p.aiPlan.highlights:(p.highlights||[])).slice(0,4);
+        ctx.font="bold 31px Arial";highlights.forEach((item,i)=>{const y=H-355+i*62;ctx.fillStyle="#d0a64b";ctx.fillText("◆",80,y);ctx.fillStyle="#fff";wrapStoryText(ctx,item,850,2).forEach((line,j)=>ctx.fillText(line,130,y+j*36));});
+        ctx.fillStyle="#fff";ctx.font="bold 30px Arial";ctx.fillText("Réf. "+ref,80,H-65);
+        if(logo)ctx.drawImage(logo,80,180,340,130,690,H-145,330,105);
+        if(elapsed>=duration*1000){resolve();return;} requestAnimationFrame(draw);
+      };requestAnimationFrame(draw);
+    });
+    recorder.stop();
+    const blob=await recordingDone;if(!blob||blob.size<1000)throw new Error("La vidéo générée est vide.");
+    currentStoryBlob=blob;currentStoryUrl=URL.createObjectURL(blob);
+    const video=$("storyVideo");video.src=currentStoryUrl;video.style.display="block";canvas.style.display="none";
+    shareButton.disabled=false;downloadButton.disabled=false;
+    status.textContent="🟢 Story créée : 9:16 · "+duration+" s · "+Math.round(blob.size/1024/1024*10)/10+" Mo · photos originales uniquement.";
+    $("storySection").scrollIntoView({behavior:"smooth",block:"start"});
+  }catch(error){status.textContent="🔴 "+(error.message||"Impossible de créer la Story.");}
+  finally{button.disabled=false;}
+}
+async function shareStoryVideo(){
+  if(!currentStoryBlob){alert("Crée d'abord la Story vidéo.");return;}
+  const ref=currentData?.listing?.reference||"annonce",file=new File([currentStoryBlob],"JML-Story-"+ref+".webm",{type:currentStoryBlob.type||"video/webm"}),text=currentSocialText("instagram")||currentSocialText("facebook")||"";
+  try{
+    if(navigator.share){
+      if(!navigator.canShare||navigator.canShare({files:[file]})){await navigator.share({title:"JML Immobilier — Story",text,files:[file]});}
+      else await navigator.share({title:"JML Immobilier — Story",text});
+      $("storyStatus").textContent="🟢 Story prête à être envoyée à Instagram, Facebook ou une autre application.";return;
+    }
+  }catch(error){if(error?.name==="AbortError")return;$("storyStatus").textContent="🔴 "+(error.message||"Partage annulé.");return;}
+  const link=document.createElement("a");link.download="JML-Story-"+ref+".webm";link.href=currentStoryUrl;link.click();$("storyStatus").textContent="📥 La Story vidéo a été téléchargée.";
+}
+$("generateStory").addEventListener("click",createStoryVideo);
+$("shareStory").addEventListener("click",shareStoryVideo);
+$("downloadStory").addEventListener("click",()=>{if(!currentStoryUrl)return;const ref=currentData?.listing?.reference||"annonce";const link=document.createElement("a");link.download="JML-Story-"+ref+".webm";link.href=currentStoryUrl;link.click();});
+
 </script>
 </body>
 </html>
