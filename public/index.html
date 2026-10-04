@@ -1426,14 +1426,20 @@ function drawStoryPhotoFrame(ctx, p, img, index, count, progress, W, H, logo, cl
   const regionY = topH;
   const regionH = H - topH - bottomH;
 
-  // Mode "cover" : on remplit toute la zone, puis on recadre légèrement si
-  // le ratio de la photo diffère du 9:16. Cela évite l'effet "photo posée
-  // au milieu d'une page blanche" visible sur certaines annonces.
+  // Mode "cover" + effet Ken Burns très léger : la photo remplit toute la
+  // zone puis effectue un zoom lent et fluide. L'amplitude reste volontairement
+  // discrète pour donner du mouvement sans déformer ni "secouer" le bien.
   const coverScale = Math.max(W / img.naturalWidth, regionH / img.naturalHeight);
-  const scale = coverScale * (1 + 0.007 * progress);
+  const eased = progress * progress * (3 - 2 * progress); // smoothstep
+  const zoomDirection = index % 2 === 0 ? 1 : -1;
+  const zoom = 1 + zoomDirection * (0.028 * eased) + (zoomDirection < 0 ? 0.028 : 0);
+  const scale = coverScale * zoom;
   const dw = img.naturalWidth * scale;
   const dh = img.naturalHeight * scale;
-  const px = (W - dw) / 2 + (index % 2 ? -1 : 1) * (progress - .5) * 5;
+
+  // Micro-mouvement horizontal opposé au zoom pour un rendu plus naturel.
+  const pan = Math.sin(progress * Math.PI) * 7 * (index % 2 === 0 ? 1 : -1);
+  const px = (W - dw) / 2 + pan;
   const py = regionY + (regionH - dh) / 2;
 
   ctx.save();
