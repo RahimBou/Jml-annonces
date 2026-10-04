@@ -135,6 +135,10 @@ function drawCover(ctx,img,w,h){
   ctx.drawImage(img,(w-nw)/2,(h-nh)/2,nw,nh);
 }
 
+function drawContain(ctx,img,w,h){
+  drawContainRegion(ctx,img,w,0,0,w,h);
+}
+
 function drawContainRegion(ctx,img,w,x0,y0,x1,y1){
   const regionW=x1-x0,regionH=y1-y0;
   const s=Math.min((regionW-28)/img.width,(regionH-28)/img.height);
