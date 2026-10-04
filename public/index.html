@@ -176,6 +176,16 @@
       <span class="story-badge">🔒 Photos originales uniquement</span>
     </div>
     <div class="story-controls">
+      <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:#f5f2e9;border-radius:10px;font-weight:700;color:var(--green)">
+        ⚡ Vitesse
+        <select id="storySpeed" style="padding:7px 10px;border-radius:8px;border:1px solid #d7cfbd">
+          <option value="0.75">0,75× — Lente</option>
+          <option value="1" selected>1× — Normale</option>
+          <option value="1.25">1,25× — Rapide</option>
+          <option value="1.5">1,5× — Très rapide</option>
+          <option value="2">2× — Dynamique</option>
+        </select>
+      </label>
       <button id="generateStory" style="background:#b28b3f">🎬 Créer la Story</button>
       <button id="shareStory" style="background:#17382f" disabled>📤 Partager la Story</button>
     </div>
@@ -1419,7 +1429,9 @@ async function createStoryVideo() {
 
     const canvas = $("storyCanvas");
     const ctx = canvas.getContext("2d", { alpha: false });
-    const W = 1080, H = 1920, fps = 30, duration = 15;
+    const W = 1080, H = 1920, fps = 30;
+    const speed = Math.max(0.5, Math.min(2, Number($("storySpeed")?.value || 1)));
+    const duration = 15 / speed;
     const mimeType = storyMimeType();
     if (!mimeType) throw new Error("Aucun format vidéo compatible n'est disponible sur ce navigateur.");
 
@@ -1520,7 +1532,7 @@ async function createStoryVideo() {
 
     shareButton.disabled = false;
     downloadButton.disabled = false;
-    status.textContent = "🟢 Story créée : 15 s · 9:16 · " +
+    status.textContent = "🟢 Story créée : " + duration.toFixed(1).replace(".", ",") + " s · vitesse " + speed.toFixed(2).replace(".", ",") + "× · 9:16 · " +
       Math.round(blob.size / 1024 / 1024 * 10) / 10 + " Mo · photos originales uniquement.";
     $("storySection").scrollIntoView({ behavior: "smooth", block: "start" });
   } catch (error) {
