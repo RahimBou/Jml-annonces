@@ -66,7 +66,7 @@
   <header>
     <div class="wrap">
       <div class="brand">JML Immobilier</div>
-      <div class="tagline">Annonces Auto — publications & Stories vidéo à partir des vraies annonces JML · v0.9.1</div>
+      <div class="tagline">Annonces Auto — publications & Stories vidéo à partir des vraies annonces JML · v0.9.2</div>
       <div style="margin-top:12px">
         <a href="/createur-post.html" style="display:inline-block;background:#c6a15b;color:#17382f;padding:9px 13px;border-radius:9px;text-decoration:none;font-weight:800">🎬 Créer un post vidéo à partir d’un ZIP</a>
       </div>
@@ -171,7 +171,7 @@
     <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
       <div>
         <h2 style="margin:0;color:var(--green)">🎬 Story vidéo JML — nouvelle version</h2>
-        <div class="photo-meta">13 secondes · 9:16 · photos originales vérifiées · intro, découverte du bien et écran final.</div>
+        <div class="photo-meta">13 secondes · 9:16 · photos originales vérifiées · accroche, découverte du bien, signature sonore JML et écran final.</div>
       </div>
       <span class="story-badge">🔒 Photos originales uniquement</span>
     </div>
@@ -211,25 +211,17 @@
         <input id="storyContactPhone" value="" maxlength="20" placeholder="Téléphone">
         <input id="storyContactCta" value="Parlons de votre projet" maxlength="40" placeholder="Appel à l'action">
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
-        <input id="storyHeadline" value="UN BIEN QUI MÉRITE LE DÉTOUR" maxlength="42" placeholder="Accroche du haut">
-        <input id="storySubheadline" value="Découvrez ce que ce bien peut vous offrir" maxlength="55" placeholder="Sous-accroche">
-        <input id="storyContactName" value="Abderrahim Boujnikh" maxlength="40" placeholder="Nom">
-        <input id="storyContactRole" value="Agent commercial indépendant en immobilier" maxlength="52" placeholder="Fonction">
-        <input id="storyContactPhone" value="" maxlength="20" placeholder="Téléphone">
-        <input id="storyContactCta" value="Parlons de votre projet" maxlength="40" placeholder="Appel à l'action">
-      </div>
     </div>    <div class="card" style="margin-top:14px;padding:14px;background:#f5f3ed;border:1px solid rgba(23,56,47,.12)">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
         <div>
           <strong style="color:var(--green)">🎵 Bibliothèque sons JML</strong>
-          <div class="photo-meta">Ajoute tes propres musiques ou sons. Ils restent dans ce navigateur et peuvent être supprimés à tout moment.</div>
+          <div class="photo-meta">La <b>Signature sonore JML</b> est intégrée automatiquement. Tu peux aussi ajouter tes propres musiques pour les tester.</div>
         </div>
         <label for="storyAudioUpload" class="button" style="background:#b28b3f;color:#fff;cursor:pointer">➕ Ajouter un son</label>
         <input id="storyAudioUpload" type="file" accept="audio/*" multiple style="display:none">
       </div>
       <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px">
-        <label style="font-size:14px"><input type="radio" name="storyAudio" value="" checked> 🔇 Sans musique</label>
+        <label style="font-size:14px"><input type="radio" name="storyAudio" value="__JML_SIGNATURE__" checked> 🎵 Signature sonore JML</label>        <label style="font-size:14px"><input type="radio" name="storyAudio" value=""> 🔇 Sans musique</label>
         <label style="font-size:14px">Volume <input id="storyAudioVolume" type="range" min="5" max="40" value="18" step="1"> <span id="storyAudioVolumeValue">18%</span></label>
       </div>
       <div id="storyAudioLibrary" style="display:grid;gap:8px;margin-top:12px"></div>
@@ -262,6 +254,54 @@ let currentStoryUrl = null;
 let selectedStoryAudioId = "";
 let storyAudioDbPromise = null;
 
+
+/* Signature sonore JML — générée localement, sans fichier externe ni musique sous licence */
+async function createJmlSignatureBuffer(audioContext, duration = 13) {
+  const Offline = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+  if (!Offline) throw new Error("Le navigateur ne permet pas de générer la signature sonore JML.");
+  const ctx = new Offline(2, Math.ceil(audioContext.sampleRate * duration), audioContext.sampleRate);
+  const master = ctx.createGain();
+  master.gain.value = 0.22;
+  master.connect(ctx.destination);
+
+  const note = (freq, start, length, amp = 0.13, type = "sine") => {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = type;
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.linearRampToValueAtTime(amp, start + 0.035);
+    gain.gain.setValueAtTime(amp * 0.82, start + Math.max(0.05, length - 0.18));
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + length);
+    osc.connect(gain); gain.connect(master);
+    osc.start(start); osc.stop(start + length + 0.02);
+  };
+
+  // Signature JML originale : motif D–F#–A–E–D, puis rappel en octave.
+  const motif = [
+    [293.66,0.00,0.55,0.17],[369.99,0.72,0.55,0.15],[440.00,1.44,0.70,0.16],
+    [329.63,2.28,0.60,0.14],[293.66,3.05,0.95,0.17],
+    [587.33,4.35,0.55,0.10],[739.99,5.05,0.55,0.09],[880.00,5.72,0.70,0.10],
+    [659.25,6.55,0.60,0.085],[587.33,7.25,1.15,0.11]
+  ];
+  motif.forEach(n => note(...n, "triangle"));
+
+  // Fond musical discret pour que la signature reste présente sans voler la vedette aux photos.
+  const pad = (freq, start, length, amp=0.022) => {
+    note(freq, start, length, amp, "sine");
+    note(freq * 2, start, length, amp * 0.16, "sine");
+  };
+  pad(146.83,0,4.1); pad(185.00,0,4.1); pad(220.00,0,4.1);
+  pad(196.00,4.0,3.5); pad(246.94,4.0,3.5); pad(293.66,4.0,3.5);
+  pad(146.83,7.1,5.1); pad(185.00,7.1,5.1); pad(220.00,7.1,5.1);
+
+  // Rappel final : même identité sonore, très court, pour la signature de marque.
+  note(293.66,9.35,0.60,0.12,"triangle");
+  note(440.00,9.95,0.65,0.13,"triangle");
+  note(587.33,10.60,1.20,0.14,"triangle");
+  note(1174.66,10.85,1.10,0.045,"sine");
+  return await ctx.startRendering();
+}
 
 /* Bibliothèque audio locale JML — IndexedDB, sans dépendance serveur */
 function storyAudioDb() {
@@ -369,8 +409,8 @@ async function renderStoryAudioLibrary() {
       box.appendChild(row);
     });
     $("storyAudioStatus").textContent = sounds.length
-      ? "🎵 " + sounds.length + " son(s) disponible(s). Sélectionne celui à intégrer dans la prochaine Story."
-      : "Aucun son personnel ajouté.";
+      ? "🎵 Signature JML active par défaut. " + sounds.length + " son(s) personnel(s) disponible(s) en option."
+      : "🎵 Signature sonore JML active par défaut.";
   } catch (error) {
     $("storyAudioStatus").textContent = "🔴 " + (error.message || "Bibliothèque audio indisponible.");
   }
@@ -404,6 +444,11 @@ async function initStoryAudioLibrary() {
     selectedStoryAudioId = "";
     $("storyAudioStatus").textContent = "🔇 La prochaine Story sera créée sans musique.";
   });
+  document.querySelector('input[name="storyAudio"][value="__JML_SIGNATURE__"]')?.addEventListener("change", () => {
+    selectedStoryAudioId = "__JML_SIGNATURE__";
+    $("storyAudioStatus").textContent = "🎵 Signature sonore JML sélectionnée — elle sera intégrée automatiquement."; 
+  });
+  selectedStoryAudioId = "__JML_SIGNATURE__";
   await renderStoryAudioLibrary();
 }
 
@@ -1290,13 +1335,20 @@ function drawStoryPill(ctx, text, x, y, bg, fg, font = "bold 30px Arial") {
   return width;
 }
 
-function drawStoryIntro(ctx, p, logo, W, H, progress) {
+function drawStoryIntro(ctx, p, logo, heroImg, W, H, progress) {
   const title = propertyType(p.title);
   const location = String(p.location || "").replace(/\s*\(\d{5}\)/, "").trim() || "Ardennes";
   const fade = Math.min(1, progress / .18);
 
   ctx.fillStyle = "#012517";
   ctx.fillRect(0, 0, W, H);
+  if (heroImg) {
+    const scale = Math.max(W / heroImg.naturalWidth, H / heroImg.naturalHeight) * 1.02;
+    const dw = heroImg.naturalWidth * scale, dh = heroImg.naturalHeight * scale;
+    ctx.drawImage(heroImg, (W-dw)/2, (H-dh)/2, dw, dh);
+  }
+  ctx.fillStyle = "rgba(1,37,23,.28)";
+  ctx.fillRect(0,0,W,H);
   storyGradient(ctx, W, H);
 
   ctx.fillStyle = "#d0a64b";
@@ -1304,14 +1356,15 @@ function drawStoryIntro(ctx, p, logo, W, H, progress) {
   ctx.fillText("JML IMMOBILIER", 60, 92);
 
   ctx.fillStyle = "#fff";
-  ctx.font = "bold 92px Georgia";
-  ctx.fillText("À VENDRE", 60, 215);
+  ctx.font = "bold 78px Georgia";
+  ctx.fillText("NOUVEAU", 60, 205);
+  ctx.fillText("À LA VENTE", 60, 292);
 
-  drawStoryPill(ctx, title, 60, 286, "#d0a64b", "#151515", "bold 30px Arial");
+  drawStoryPill(ctx, title, 60, 365, "#d0a64b", "#151515", "bold 30px Arial");
 
   ctx.fillStyle = "#fff";
   ctx.font = "bold 43px Arial";
-  wrapStoryText(ctx, location, 850, 2).forEach((line, i) => ctx.fillText(line, 60, 365 + i * 54));
+  wrapStoryText(ctx, location, 850, 2).forEach((line, i) => ctx.fillText(line, 60, 445 + i * 54));
 
   ctx.fillStyle = "rgba(1,37,23,.92)";
   ctx.beginPath();
@@ -1580,18 +1633,25 @@ async function createStoryVideo() {
     let audioDestination = null;
 
     if (selectedStoryAudioId) {
-      const sound = await storyAudioGet(selectedStoryAudioId);
-      if (!sound?.blob) throw new Error("Le son sélectionné n'est plus disponible.");
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
       if (!AudioCtx) throw new Error("Ce navigateur ne permet pas d'intégrer une piste audio.");
       audioContext = new AudioCtx();
       await audioContext.resume();
-      const audioBuffer = await audioContext.decodeAudioData(await sound.blob.arrayBuffer());
+
+      let audioBuffer;
+      if (selectedStoryAudioId === "__JML_SIGNATURE__") {
+        audioBuffer = await createJmlSignatureBuffer(audioContext, duration);
+      } else {
+        const sound = await storyAudioGet(selectedStoryAudioId);
+        if (!sound?.blob) throw new Error("Le son sélectionné n'est plus disponible.");
+        audioBuffer = await audioContext.decodeAudioData(await sound.blob.arrayBuffer());
+      }
+
       audioSource = audioContext.createBufferSource();
       audioSource.buffer = audioBuffer;
-      audioSource.loop = true;
+      audioSource.loop = selectedStoryAudioId !== "__JML_SIGNATURE__";
       audioGain = audioContext.createGain();
-      audioGain.gain.value = Math.max(0.05, Number($("storyAudioVolume")?.value || 18) / 100);
+      audioGain.gain.value = Math.max(0.03, Number($("storyAudioVolume")?.value || 18) / 100);
       audioDestination = audioContext.createMediaStreamDestination();
       audioSource.connect(audioGain);
       audioGain.connect(audioDestination);
@@ -1650,7 +1710,7 @@ async function createStoryVideo() {
         ctx.textAlign = "left";
 
         if (elapsed < introDuration) {
-          drawStoryIntro(ctx, p, logo, W, H, elapsed / introDuration);
+          drawStoryIntro(ctx, p, logo, loaded[0], W, H, elapsed / introDuration);
         } else if (elapsed < duration - finalDuration) {
           const photoElapsed = elapsed - introDuration;
 
@@ -1744,7 +1804,7 @@ async function createStoryVideo() {
 
     shareButton.disabled = false;
     downloadButton.disabled = false;
-    status.textContent = "🟢 Story créée : " + duration.toFixed(1).replace(".", ",") + " s · vitesse " + speed.toFixed(2).replace(".", ",") + "× · rythme " + (paceMode === "dynamic" ? "dynamique" : paceMode === "calm" ? "premium" : "intelligent") + " · 9:16 · "
+    status.textContent = "🟢 Story créée : " + duration.toFixed(1).replace(".", ",") + " s · 🎵 " + (selectedStoryAudioId === "__JML_SIGNATURE__" ? "Signature JML" : selectedStoryAudioId ? "Musique personnalisée" : "Sans musique") + " · vitesse " + speed.toFixed(2).replace(".", ",") + "× · rythme " + (paceMode === "dynamic" ? "dynamique" : paceMode === "calm" ? "premium" : "intelligent") + " · 9:16 · "
       Math.round(blob.size / 1024 / 1024 * 10) / 10 + " Mo · photos originales uniquement.";
     $("storySection").scrollIntoView({ behavior: "smooth", block: "start" });
   } catch (error) {
