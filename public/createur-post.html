@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JML Immobilier — Créateur de post vidéo</title>
+<style>
+:root{--green:#17382f;--gold:#c6a15b;--cream:#f6f2e9;--ink:#202420;--muted:#6f746f;--line:#ddd8ca}
+*{box-sizing:border-box}body{margin:0;background:var(--cream);color:var(--ink);font-family:Inter,Arial,sans-serif}
+header{background:var(--green);color:#fff;padding:22px 20px;border-bottom:4px solid var(--gold)}
+.wrap,main{max-width:1120px;margin:auto}.brand{font-size:27px;font-weight:800}.tag{color:#e7dcc3;margin-top:5px;font-size:14px}
+main{padding:24px 20px 60px}.card{background:#fff;border:1px solid var(--line);border-radius:18px;padding:22px;box-shadow:0 8px 28px rgba(31,45,39,.07);margin-bottom:18px}
+h1,h2{color:var(--green)}h1{margin:0 0 8px;font-size:30px}.muted{color:var(--muted);line-height:1.5}
+input[type=file]{width:100%;padding:12px;border:1px dashed #b9af99;border-radius:12px;background:#faf8f2}
+.controls{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+button{border:0;border-radius:10px;padding:13px 17px;background:var(--green);color:#fff;font-weight:800;cursor:pointer}
+button.gold{background:#b28b3f}button.gray{background:#6f746f}button:disabled{opacity:.5;cursor:not-allowed}
+.status{margin-top:12px;font-weight:700}.ok{color:#226b45}.err{color:#a12626}
+.grid{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-top:16px}
+.thumb{position:relative;background:#f1eee7;border-radius:12px;overflow:hidden;border:1px solid #e1dacb}
+.thumb img{display:block;width:100%;aspect-ratio:9/14;object-fit:contain;background:#182b25}
+.thumb span{position:absolute;left:7px;top:7px;background:var(--green);color:#fff;border-radius:999px;padding:4px 8px;font-size:12px;font-weight:800}
+.preview{display:grid;grid-template-columns:360px 1fr;gap:22px;align-items:start}
+canvas,video{width:100%;max-width:360px;display:block;background:#111;border-radius:14px;box-shadow:0 8px 28px rgba(0,0,0,.18)}
+.option{padding:14px;background:#f5f3ed;border-radius:12px;border:1px solid #e5decd;margin-top:12px}
+.row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.range{width:180px}
+@media(max-width:800px){.grid{grid-template-columns:repeat(2,1fr)}.preview{grid-template-columns:1fr}.preview canvas,.preview video{margin:auto}}
+</style>
+</head>
+<body>
+<header><div class="wrap"><div class="brand">JML Immobilier</div><div class="tag">Créateur de posts vidéo · à partir de tes visuels JML</div></div></header>
+<main>
+<section class="card">
+<h1>🎬 Créateur de post vidéo JML</h1>
+<div class="muted">Tu m'envoies un fichier ZIP contenant tes 10 images. Le module les décompresse dans ton navigateur, les remet dans l'ordre, garde chaque visuel entièrement visible et crée automatiquement une vidéo verticale 9:16 avec mouvements doux et transitions.</div>
+<div style="margin-top:16px"><input id="zipInput" type="file" accept=".zip,application/zip"></div>
+<div id="status" class="status">En attente du fichier ZIP.</div>
+<div id="thumbs" class="grid"></div>
+</section>
+
+<section id="settings" class="card" style="display:none">
+<h2>⚙️ Réglages de la vidéo</h2>
+<div class="row">
+<label>Durée par image
+<select id="duration">
+<option value="1.8">1,8 s</option><option value="2.2">2,2 s</option><option value="2.6" selected>2,6 s</option><option value="3">3,0 s</option><option value="3.5">3,5 s</option>
+</select></label>
+<label>Transition
+<select id="transition"><option value="0.35">Douce</option><option value="0.55" selected>Fluide</option><option value="0.8">Lente</option></select></label>
+</div>
+<div class="option">
+<b>🎵 Musique (facultative)</b>
+<div class="muted" style="font-size:13px">La musique est traitée localement dans ton navigateur et n'est pas envoyée au serveur.</div>
+<input id="audioInput" type="file" accept="audio/*" style="margin-top:8px">
+<div class="row" style="margin-top:10px"><span>Volume</span><input id="volume" class="range" type="range" min="5" max="40" value="18"><span id="volumeValue">18%</span></div>
+</div>
+<div class="controls"><button id="generate" class="gold">🎬 Créer la vidéo</button><button id="reset" class="gray">↩️ Recommencer</button></div>
+<div id="generateStatus" class="status"></div>
+</section>
+
+<section id="result" class="card" style="display:none">
+<h2>🎥 Vidéo JML</h2>
+<div class="preview">
+<div><canvas id="canvas" width="720" height="1280"></canvas><video id="video" controls playsinline style="display:none"></video></div>
+<div>
+<div class="muted">Format vertical 9:16. Les images ne sont pas recadrées : un fond agrandi et flouté remplit l'écran, tandis que le visuel original reste entier au centre.</div>
+<div class="controls"><button id="download" class="gold" disabled>⬇️ Télécharger la vidéo</button><button id="share" disabled>📤 Partager</button></div>
+<div id="resultStatus" class="status"></div>
+</div>
+</div>
+</section>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+let slides=[], audioFile=null, videoBlob=null, videoUrl=null;
+
+function naturalNumber(name){
+  const m=name.match(/(?:^|[^0-9])(\\d+)(?:[^0-9]|$)/);
+  return m?Number(m[1]):9999;
+}
+function cleanName(name){return name.split('/').pop();}
+function isImage(file){return /\\.(jpe?g|png|webp|gif|bmp)$/i.test(file.name||'');}
+
+async function imageFromBlob(blob){
+  const url=URL.createObjectURL(blob);
+  try{
+    const img=new Image();
+    img.decoding='async';
+    img.src=url;
+    await img.decode();
+    return img;
+  }finally{
+    // The image keeps its decoded data after decode in current Chromium/Firefox.
+    setTimeout(()=>URL.revokeObjectURL(url),1000);
+  }
+}
+
+function drawCover(ctx,img,w,h){
+  const s=Math.max(w/img.width,h/img.height);
+  const nw=img.width*s,nh=img.height*s;
+  ctx.drawImage(img,(w-nw)/2,(h-nh)/2,nw,nh);
+}
+
+function drawContain(ctx,img,w,h){
+  const s=Math.min((w-42)/img.width,(h-72)/img.height);
+  const nw=img.width*s,nh=img.height*s;
+  const x=(w-nw)/2,y=(h-nh)/2;
+  ctx.drawImage(img,x,y,nw,nh);
+  ctx.save();
+  ctx.strokeStyle='#c6a15b';ctx.lineWidth=3;
+  ctx.strokeRect(x-2,y-2,nw+4,nh+4);
+  ctx.restore();
+}
+
+function drawSlide(ctx,slide,t){
+  const {img}=slide,w=ctx.canvas.width,h=ctx.canvas.height;
+  ctx.clearRect(0,0,w,h);
+  drawCover(ctx,img,w,h);
+  ctx.fillStyle='rgba(9,31,25,.34)';ctx.fillRect(0,0,w,h);
+  // Subtle slow zoom on the original visual without cropping it.
+  ctx.save();
+  const scale=1+0.012*t;
+  const nw=w*scale,nh=h*scale;
+  ctx.globalAlpha=0.06;
+  ctx.drawImage(img,(w-nw)/2,(h-nh)/2,nw,nh);
+  ctx.restore();
+  drawContain(ctx,img,w,h);
+}
+
+async function readZip(file){
+  if(!window.JSZip) throw new Error('Le moteur ZIP n\'est pas chargé. Recharge la page.');
+  if(file.size>60*1024*1024) throw new Error('Le ZIP dépasse 60 Mo.');
+  const zip=await JSZip.loadAsync(file);
+  const entries=[];
+  zip.forEach((name,entry)=>{
+    if(!entry.dir && isImage({name})) entries.push(entry);
+  });
+  entries.sort((a,b)=>{
+    const na=naturalNumber(cleanName(a.name)),nb=naturalNumber(cleanName(b.name));
+    return na-nb || a.name.localeCompare(b.name,'fr',{numeric:true});
+  });
+  if(entries.length!==10) throw new Error('Le ZIP doit contenir exactement 10 images. Images trouvées : '+entries.length+'.');
+  const loaded=[];
+  for(const entry of entries){
+    const blob=await entry.async('blob');
+    const img=await imageFromBlob(blob);
+    loaded.push({name:cleanName(entry.name),img});
+  }
+  return loaded;
+}
+
+function renderThumbs(){
+  $('thumbs').innerHTML='';
+  slides.forEach((s,i)=>{
+    const box=document.createElement('div');box.className='thumb';
+    const im=document.createElement('img');im.src=s.img.src || ''; // fallback below
+    // Canvas snapshot avoids relying on a revoked object URL.
+    const c=document.createElement('canvas');c.width=180;c.height=320;
+    const cx=c.getContext('2d');cx.fillStyle='#17382f';cx.fillRect(0,0,c.width,c.height);drawContain(cx,s.img,c.width,c.height);
+    im.src=c.toDataURL('image/jpeg',.86);
+    const n=document.createElement('span');n.textContent=String(i+1);
+    box.append(im,n);$('thumbs').appendChild(box);
+  });
+}
+
+$('zipInput').addEventListener('change',async()=>{
+  const file=$('zipInput').files[0];if(!file)return;
+  $('status').className='status';$('status').textContent='⏳ Lecture du ZIP et préparation des 10 images…';
+  $('settings').style.display='none';$('result').style.display='none';
+  try{
+    slides=await readZip(file);renderThumbs();
+    $('status').className='status ok';$('status').textContent='✅ 10 images prêtes, dans l’ordre.';
+    $('settings').style.display='block';
+  }catch(e){
+    slides=[];$('thumbs').innerHTML='';
+    $('status').className='status err';$('status').textContent='🔴 '+(e.message||'Impossible de lire le ZIP.');
+  }
+});
+$('audioInput').addEventListener('change',()=>{audioFile=$('audioInput').files[0]||null;});
+$('volume').addEventListener('input',()=>$('volumeValue').textContent=$('volume').value+'%');
+$('reset').addEventListener('click',()=>location.reload());
+
+function pickMime(){
+  const types=['video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm'];
+  return types.find(t=>MediaRecorder.isTypeSupported(t))||'';
+}
+
+async function createVideo(){
+  if(slides.length!==10) throw new Error('Charge d’abord un ZIP de 10 images.');
+  if(!window.MediaRecorder) throw new Error('La création vidéo n’est pas prise en charge par ce navigateur.');
+  const mime=pickMime();if(!mime)throw new Error('Format vidéo WebM indisponible sur ce navigateur.');
+  const canvas=$('canvas'),ctx=canvas.getContext('2d',{alpha:false});
+  const stream=canvas.captureStream(24);
+  let audioContext=null,source=null;
+  try{
+    if(audioFile){
+      audioContext=new (window.AudioContext||window.webkitAudioContext)();
+      const buffer=await audioContext.decodeAudioData(await audioFile.arrayBuffer());
+      source=audioContext.createBufferSource();
+      source.buffer=buffer;source.loop=true;
+      const gain=audioContext.createGain();gain.gain.value=Number($('volume').value)/100;
+      const dest=audioContext.createMediaStreamDestination();
+      source.connect(gain);gain.connect(dest);
+      dest.stream.getAudioTracks().forEach(t=>stream.addTrack(t));
+    }
+    const recorder=new MediaRecorder(stream,{mimeType:mime,videoBitsPerSecond:6500000,audioBitsPerSecond:128000});
+    const chunks=[];
+    recorder.ondataavailable=e=>{if(e.data&&e.data.size)chunks.push(e.data);};
+    const done=new Promise((resolve,reject)=>{recorder.onstop=resolve;recorder.onerror=()=>reject(recorder.error||new Error('Enregistrement vidéo impossible.'));});
+    recorder.start(250);if(source)source.start(0);
+    const dur=Number($('duration').value),fade=Number($('transition').value),fps=24;
+    const totalFrames=Math.round(slides.length*dur*fps);
+    for(let f=0;f<totalFrames;f++){
+      const time=f/fps,index=Math.min(slides.length-1,Math.floor(time/dur));
+      const local=time-index*dur;
+      drawSlide(ctx,slides[index],local/dur);
+      if(index<slides.length-1 && local>dur-fade){
+        const a=Math.min(1,Math.max(0,(local-(dur-fade))/fade));
+        drawSlide(ctx,slides[index+1],0);
+        const next=ctx.getImageData(0,0,canvas.width,canvas.height);
+        drawSlide(ctx,slides[index],local/dur);
+        const cur=ctx.getImageData(0,0,canvas.width,canvas.height);
+        const out=ctx.createImageData(canvas.width,canvas.height);
+        for(let p=0;p<out.data.length;p+=4){
+          out.data[p]=cur.data[p]*(1-a)+next.data[p]*a;
+          out.data[p+1]=cur.data[p+1]*(1-a)+next.data[p+1]*a;
+          out.data[p+2]=cur.data[p+2]*(1-a)+next.data[p+2]*a;
+          out.data[p+3]=255;
+        }
+        ctx.putImageData(out,0,0);
+      }
+      if(f%6===0){$('generateStatus').textContent='🎬 Création… '+Math.round((f/totalFrames)*100)+'%';}
+      await new Promise(r=>setTimeout(r,1000/fps));
+    }
+    if(source)source.stop();
+    recorder.stop();await done;
+    videoBlob=new Blob(chunks,{type:mime});
+    if(videoUrl)URL.revokeObjectURL(videoUrl);
+    videoUrl=URL.createObjectURL(videoBlob);
+    $('video').src=videoUrl;$('video').style.display='block';$('canvas').style.display='none';
+    $('download').disabled=false;$('share').disabled=false;
+    $('result').style.display='block';
+    $('generateStatus').className='status ok';$('generateStatus').textContent='✅ Vidéo créée.';
+    $('resultStatus').textContent='10 images · '+$('duration').value+' s/image · transitions '+$('transition').value+' s · '+(audioFile?'avec musique':'sans musique')+'.';
+    $('result').scrollIntoView({behavior:'smooth'});
+  }finally{
+    if(source){try{source.stop()}catch{}}
+    if(audioContext){try{await audioContext.close()}catch{}}
+    stream.getTracks().forEach(t=>t.stop());
+  }
+}
+
+$('generate').addEventListener('click',async()=>{
+  $('generate').disabled=true;$('generateStatus').className='status';$('generateStatus').textContent='⏳ Préparation…';
+  try{await createVideo();}catch(e){$('generateStatus').className='status err';$('generateStatus').textContent='🔴 '+(e.message||'Erreur de création vidéo.');}
+  finally{$('generate').disabled=false;}
+});
+$('download').addEventListener('click',()=>{
+  if(!videoBlob)return;
+  const a=document.createElement('a');a.href=videoUrl;a.download='JML_Ardennes_post_video.webm';a.click();
+});
+$('share').addEventListener('click',async()=>{
+  if(!videoBlob)return;
+  const file=new File([videoBlob],'JML_Ardennes_post_video.webm',{type:videoBlob.type});
+  try{
+    if(navigator.canShare && navigator.canShare({files:[file]})){
+      await navigator.share({title:'JML Immobilier',text:'Publication JML Immobilier',files:[file]});
+    }else{
+      $('resultStatus').textContent='📥 Le partage direct de fichier n’est pas disponible ici. Utilise Télécharger la vidéo.';
+    }
+  }catch(e){if(e.name!=='AbortError')$('resultStatus').textContent='Le partage a été annulé ou refusé.';}
+});
+</script>
+</body>
+</html>
