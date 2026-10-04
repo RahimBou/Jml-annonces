@@ -186,6 +186,14 @@
           <option value="2">2× — Dynamique</option>
         </select>
       </label>
+      <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:#f5f2e9;border-radius:10px;font-weight:700;color:var(--green)">
+        🎞️ Rythme
+        <select id="storyPace" style="padding:7px 10px;border-radius:8px;border:1px solid #d7cfbd">
+          <option value="smart" selected>Intelligent — adapté aux photos</option>
+          <option value="dynamic">Dynamique — plus rapide</option>
+          <option value="calm">Premium — plus lent</option>
+        </select>
+      </label>
       <button id="generateStory" style="background:#b28b3f">🎬 Créer la Story</button>
       <button id="shareStory" style="background:#17382f" disabled>📤 Partager la Story</button>
     </div>
@@ -195,6 +203,14 @@
     <div class="card" style="margin-top:14px;padding:14px;background:#f5f3ed;border:1px solid rgba(23,56,47,.12)">
       <div style="color:var(--green);font-weight:800">✨ Habillage commercial de la Story</div>
       <div class="photo-meta">Ces éléments apparaissent sur les écrans photos. Le téléphone reste vide tant que tu ne l'as pas renseigné.</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
+        <input id="storyHeadline" value="UN BIEN QUI MÉRITE LE DÉTOUR" maxlength="42" placeholder="Accroche du haut">
+        <input id="storySubheadline" value="Découvrez ce que ce bien peut vous offrir" maxlength="55" placeholder="Sous-accroche">
+        <input id="storyContactName" value="Abderrahim Boujnikh" maxlength="40" placeholder="Nom">
+        <input id="storyContactRole" value="Agent commercial indépendant en immobilier" maxlength="52" placeholder="Fonction">
+        <input id="storyContactPhone" value="" maxlength="20" placeholder="Téléphone">
+        <input id="storyContactCta" value="Parlons de votre projet" maxlength="40" placeholder="Appel à l'action">
+      </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
         <input id="storyHeadline" value="UN BIEN QUI MÉRITE LE DÉTOUR" maxlength="42" placeholder="Accroche du haut">
         <input id="storySubheadline" value="Découvrez ce que ce bien peut vous offrir" maxlength="55" placeholder="Sous-accroche">
@@ -1336,22 +1352,28 @@ function fitStoryText(ctx, text, maxWidth, maxSize, minSize = 18) {
   return minSize;
 }
 
+function storyImageLabel(index, img) {
+  const ratio = img.naturalWidth / Math.max(1, img.naturalHeight);
+  if (index === 0) return "À DÉCOUVRIR";
+  if (ratio >= 1.35) return "UN ESPACE À DÉCOUVRIR";
+  if (ratio <= 0.80) return "UN INTÉRIEUR À DÉCOUVRIR";
+  return "UN BIEN QUI MÉRITE LE DÉTOUR";
+}
+
 function drawStoryPhotoFrame(ctx, p, img, index, count, progress, W, H, logo, clear = true) {
-  // Présentation plus commerciale : accroche en haut, photo au centre,
-  // identité/contact en bas. Aucun fond photo dupliqué.
   if (clear) {
     ctx.fillStyle = "#f6f2e9";
     ctx.fillRect(0, 0, W, H);
   }
 
-  const topH = 210;
-  const bottomH = 235;
-  const regionY = topH + 14;
-  const regionH = H - topH - bottomH - 28;
+  const topH = 205;
+  const bottomH = 260;
+  const regionY = topH + 12;
+  const regionH = H - topH - bottomH - 24;
 
-  // Photo originale, entière, avec un mouvement presque imperceptible.
-  const baseScale = Math.min((W - 70) / img.naturalWidth, (regionH - 32) / img.naturalHeight);
-  const scale = baseScale * (1 + 0.006 * progress);
+  // Photo originale entière, avec un mouvement très léger.
+  const baseScale = Math.min((W - 64) / img.naturalWidth, (regionH - 28) / img.naturalHeight);
+  const scale = baseScale * (1 + 0.007 * progress);
   const dw = img.naturalWidth * scale;
   const dh = img.naturalHeight * scale;
   const px = (W - dw) / 2 + (index % 2 ? -1 : 1) * (progress - .5) * 5;
@@ -1374,84 +1396,94 @@ function drawStoryPhotoFrame(ctx, p, img, index, count, progress, W, H, logo, cl
   const role = String($("storyContactRole")?.value || "Agent commercial indépendant en immobilier").trim();
   const phone = String($("storyContactPhone")?.value || "").trim();
   const cta = String($("storyContactCta")?.value || "Parlons de votre projet").trim();
+  const location = String(p.location || "").replace(/\s*\(\d{5}\)/, "").trim() || "Ardennes";
 
-  // Bandeau supérieur : accroche visible dès la première seconde.
+  // Haut : accroche + localisation + compteur.
   ctx.fillStyle = "rgba(23,56,47,.98)";
   ctx.fillRect(0, 0, W, topH);
 
   ctx.fillStyle = "#c6a15b";
-  ctx.font = "800 " + fitStoryText(ctx, headline, W - 90, 38, 22) + "px Arial";
+  ctx.font = "800 " + fitStoryText(ctx, headline, W - 110, 38, 22) + "px Arial";
   ctx.textAlign = "center";
-  ctx.fillText(headline, W / 2, 55);
+  ctx.fillText(headline, W / 2, 52);
 
   ctx.fillStyle = "#fff";
-  ctx.font = "600 " + fitStoryText(ctx, sub, W - 100, 25, 17) + "px Arial";
-  ctx.fillText(sub, W / 2, 96);
+  ctx.font = "600 " + fitStoryText(ctx, sub, W - 120, 24, 16) + "px Arial";
+  ctx.fillText(sub, W / 2, 91);
 
-  ctx.fillStyle = "#c6a15b";
-  ctx.fillRect(55, 121, W - 110, 2);
+  ctx.fillStyle = "rgba(198,161,91,.55)";
+  ctx.fillRect(60, 116, W - 120, 2);
 
   ctx.fillStyle = "#fff";
   ctx.font = "700 20px Arial";
-  const location = String(p.location || "").replace(/\s*\(\d{5}\)/, "").trim() || "Ardennes";
-  ctx.fillText(location, W / 2, 157);
+  ctx.fillText(location, W / 2, 151);
 
-  ctx.fillStyle = "#fff";
+  ctx.fillStyle = "#c6a15b";
   ctx.font = "800 18px Arial";
-  ctx.fillText("JML IMMOBILIER", W / 2, 187);
+  ctx.fillText("JML IMMOBILIER", W / 2, 184);
 
-  // Petit compteur, discret.
   ctx.fillStyle = "rgba(198,161,91,.96)";
   ctx.beginPath();
-  ctx.roundRect(W - 180, 18, 135, 42, 21);
+  ctx.roundRect(W - 178, 18, 133, 40, 20);
   ctx.fill();
   ctx.fillStyle = "#17382f";
-  ctx.font = "800 18px Arial";
-  ctx.fillText(String(index + 1).padStart(2, "0") + " / " + String(count).padStart(2, "0"), W - 112, 45);
+  ctx.font = "800 17px Arial";
+  ctx.fillText(String(index + 1).padStart(2, "0") + " / " + String(count).padStart(2, "0"), W - 111, 44);
 
-  // Bandeau inférieur : le bien + contact.
+  // Petit bandeau dans la zone photo, uniquement pour créer de l'impact.
+  const label = storyImageLabel(index, img);
+  ctx.textAlign = "left";
+  ctx.fillStyle = "rgba(23,56,47,.92)";
+  ctx.beginPath();
+  ctx.roundRect(38, regionY + regionH - 84, Math.min(W - 76, 610), 60, 18);
+  ctx.fill();
+  ctx.fillStyle = "#c6a15b";
+  ctx.font = "800 " + fitStoryText(ctx, label, Math.min(W - 120, 530), 25, 17) + "px Arial";
+  ctx.fillText(label, 60, regionY + regionH - 46);
+
+  // Bas : prix + caractéristiques + identité/contact.
   ctx.fillStyle = "rgba(23,56,47,.99)";
   ctx.fillRect(0, H - bottomH, W, bottomH);
 
   ctx.textAlign = "left";
   ctx.fillStyle = "#c6a15b";
-  ctx.font = "800 43px Georgia";
-  ctx.fillText(p.price || "Prix", 40, H - bottomH + 48);
+  ctx.font = "800 42px Georgia";
+  ctx.fillText(p.price || "Prix", 38, H - bottomH + 45);
 
   const specs = [p.surface || "", p.rooms ? p.rooms + " pièces" : "", p.bedrooms ? p.bedrooms + " chambres" : ""]
     .filter(Boolean).join(" · ");
   ctx.fillStyle = "#fff";
-  ctx.font = "700 22px Arial";
-  if (specs) ctx.fillText(specs, 40, H - bottomH + 80);
+  ctx.font = "700 21px Arial";
+  if (specs) ctx.fillText(specs, 38, H - bottomH + 76);
 
-  ctx.fillStyle = "#c6a15b";
-  ctx.fillRect(40, H - bottomH + 99, W - 80, 2);
+  ctx.fillStyle = "rgba(198,161,91,.55)";
+  ctx.fillRect(38, H - bottomH + 94, W - 76, 2);
 
   ctx.fillStyle = "#fff";
-  ctx.font = "800 22px Arial";
-  ctx.fillText(name, 40, H - bottomH + 132);
+  ctx.font = "800 21px Arial";
+  ctx.fillText(name, 38, H - bottomH + 126);
 
-  ctx.fillStyle = "rgba(255,255,255,.88)";
-  ctx.font = "500 17px Arial";
-  ctx.fillText(role, 40, H - bottomH + 157);
+  ctx.fillStyle = "rgba(255,255,255,.84)";
+  ctx.font = "500 16px Arial";
+  ctx.fillText(role, 38, H - bottomH + 151);
 
   if (phone) {
     ctx.fillStyle = "#c6a15b";
-    ctx.font = "800 22px Arial";
-    ctx.fillText("☎ " + phone, 40, H - bottomH + 190);
+    ctx.font = "800 21px Arial";
+    ctx.fillText("☎ " + phone, 38, H - bottomH + 185);
   }
 
   ctx.fillStyle = "#fff";
   ctx.font = "800 18px Arial";
   ctx.textAlign = "right";
-  ctx.fillText(cta, W - 40, H - bottomH + 190);
+  ctx.fillText(cta, W - 38, H - bottomH + 185);
 
-  ctx.textAlign = "left";
   if (logo) {
     ctx.globalAlpha = .9;
-    ctx.drawImage(logo, W - 245, H - bottomH + 116, 190, 60);
+    ctx.drawImage(logo, W - 225, H - bottomH + 112, 180, 58);
     ctx.globalAlpha = 1;
   }
+  ctx.textAlign = "left";
 }
 function drawStoryFinal(ctx, p, logo, W, H, progress) {
   ctx.fillStyle = "#012517";
@@ -1579,18 +1611,24 @@ async function createStoryVideo() {
     });
 
     const logo = await loadLocalCanvasImage("/jml-logo-officiel.svg");
-    const introDuration = 1.8;
-    const finalDuration = 2.2;
+    const introDuration = 1.5;
+    const finalDuration = 1.7;
     const photoAreaDuration = duration - introDuration - finalDuration;
+    const paceMode = $("storyPace")?.value || "smart";
 
-    // Les photos horizontales demandent plus de temps pour être lues.
-    // On répartit donc le temps disponible selon l'orientation, sans changer
-    // la durée totale de la Story.
-    const photoWeights = loaded.map(img => {
+    // Rythme intelligent : une photo paysage ou très détaillée reste plus longtemps,
+    // une photo verticale/simple passe plus vite. La durée totale reste inchangée.
+    const photoWeights = loaded.map((img, index) => {
       const ratio = img.naturalWidth / Math.max(1, img.naturalHeight);
-      if (ratio >= 1.35) return 1.35; // paysage
-      if (ratio <= 0.80) return 0.90; // portrait
-      return 1.10;                    // carré / intermédiaire
+      let weight;
+      if (ratio >= 1.35) weight = 1.38;      // paysage : lecture plus confortable
+      else if (ratio <= 0.80) weight = 0.78; // portrait : plus dynamique
+      else weight = 1.00;                    // carré/intermédiaire
+      if (index === 0) weight *= 1.10;       // première photo : accroche
+      if (index === loaded.length - 1) weight *= 0.88;
+      if (paceMode === "dynamic") weight *= 0.86;
+      if (paceMode === "calm") weight *= 1.16;
+      return weight;
     });
     const totalPhotoWeight = photoWeights.reduce((sum, weight) => sum + weight, 0);
     const photoDurations = photoWeights.map(weight => photoAreaDuration * weight / totalPhotoWeight);
@@ -1631,25 +1669,38 @@ async function createStoryVideo() {
 
           drawStoryPhotoFrame(ctx, p, loaded[index], index, loaded.length, local, W, H, logo, true);
 
-          // Fondu plus doux : ~0,36 s. Les deux images se chevauchent
-          // proprement au lieu de donner une impression de changement brutal.
+          // Vraie transition douce : chaque photo possède une transition adaptée.
+          // On évite les superpositions longues qui donnaient un effet "moche".
+          const ratio = loaded[index].naturalWidth / Math.max(1, loaded[index].naturalHeight);
+          const transitionStyle = ratio >= 1.35 ? "slide" : (ratio <= 0.80 ? "zoom" : "fade");
           const transitionDuration = Math.min(
-            0.36,
-            currentDuration * 0.22,
-            index < photoDurations.length - 1 ? photoDurations[index + 1] * 0.22 : 0.36
+            transitionStyle === "slide" ? 0.48 : 0.34,
+            currentDuration * 0.20,
+            index < photoDurations.length - 1 ? photoDurations[index + 1] * 0.20 : 0.34
           );
 
           if (index < loaded.length - 1 && local > 1 - (transitionDuration / currentDuration)) {
             const transitionProgress =
               (local - (1 - transitionDuration / currentDuration)) /
               (transitionDuration / currentDuration);
+            const a = Math.max(0, Math.min(1, transitionProgress));
 
             ctx.save();
-            ctx.globalAlpha = Math.max(0, Math.min(1, transitionProgress));
-            drawStoryPhotoFrame(
-              ctx, p, loaded[index + 1], index + 1, loaded.length,
-              0, W, H, logo, false
-            );
+            if (transitionStyle === "slide") {
+              // Paysage : léger glissement latéral, plus élégant qu'un fondu rapide.
+              ctx.globalAlpha = a;
+              ctx.translate((1 - a) * 55, 0);
+            } else if (transitionStyle === "zoom") {
+              // Portrait : petit zoom d'entrée.
+              const z = 0.985 + a * 0.015;
+              ctx.translate(W / 2, H / 2);
+              ctx.scale(z, z);
+              ctx.translate(-W / 2, -H / 2);
+              ctx.globalAlpha = a;
+            } else {
+              ctx.globalAlpha = a;
+            }
+            drawStoryPhotoFrame(ctx, p, loaded[index + 1], index + 1, loaded.length, 0, W, H, logo, false);
             ctx.restore();
           }
         } else {
@@ -1682,7 +1733,7 @@ async function createStoryVideo() {
 
     shareButton.disabled = false;
     downloadButton.disabled = false;
-    status.textContent = "🟢 Story créée : " + duration.toFixed(1).replace(".", ",") + " s · vitesse " + speed.toFixed(2).replace(".", ",") + "× · 9:16 · " +
+    status.textContent = "🟢 Story créée : " + duration.toFixed(1).replace(".", ",") + " s · vitesse " + speed.toFixed(2).replace(".", ",") + "× · rythme " + (paceMode === "dynamic" ? "dynamique" : paceMode === "calm" ? "premium" : "intelligent") + " · 9:16 · "
       Math.round(blob.size / 1024 / 1024 * 10) / 10 + " Mo · photos originales uniquement.";
     $("storySection").scrollIntoView({ behavior: "smooth", block: "start" });
   } catch (error) {
