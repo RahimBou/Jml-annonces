@@ -1485,7 +1485,25 @@ async function createStoryVideo() {
     const logo = await loadLocalCanvasImage("/jml-logo-officiel.svg");
     const introDuration = 1.8;
     const finalDuration = 2.2;
-    const photoDuration = (duration - introDuration - finalDuration) / loaded.length;
+    const photoAreaDuration = duration - introDuration - finalDuration;
+
+    // Les photos horizontales demandent plus de temps pour être lues.
+    // On répartit donc le temps disponible selon l'orientation, sans changer
+    // la durée totale de la Story.
+    const photoWeights = loaded.map(img => {
+      const ratio = img.naturalWidth / Math.max(1, img.naturalHeight);
+      if (ratio >= 1.35) return 1.35; // paysage
+      if (ratio <= 0.80) return 0.90; // portrait
+      return 1.10;                    // carré / intermédiaire
+    });
+    const totalPhotoWeight = photoWeights.reduce((sum, weight) => sum + weight, 0);
+    const photoDurations = photoWeights.map(weight => photoAreaDuration * weight / totalPhotoWeight);
+    const photoStarts = [];
+    let photoCursor = 0;
+    photoDurations.forEach(d => {
+      photoStarts.push(photoCursor);
+      photoCursor += d;
+    });
 
     recorder.start(100);
     if (audioSource) audioSource.start(0);
@@ -1501,16 +1519,41 @@ async function createStoryVideo() {
           drawStoryIntro(ctx, p, logo, W, H, elapsed / introDuration);
         } else if (elapsed < duration - finalDuration) {
           const photoElapsed = elapsed - introDuration;
-          const index = Math.min(loaded.length - 1, Math.floor(photoElapsed / photoDuration));
-          const local = (photoElapsed - index * photoDuration) / photoDuration;
-          const fade = Math.min(1, Math.min(local / .22, (1 - local) / .22));
+
+          let index = photoDurations.length - 1;
+          for (let i = 0; i < photoDurations.length; i++) {
+            if (photoElapsed < photoStarts[i] + photoDurations[i]) {
+              index = i;
+              break;
+            }
+          }
+
+          const local = Math.max(0, Math.min(1,
+            (photoElapsed - photoStarts[index]) / photoDurations[index]
+          ));
+          const currentDuration = photoDurations[index];
+
           drawStoryPhotoFrame(ctx, p, loaded[index], index, loaded.length, local, W, H, logo, true);
-          // Transition = simple fondu croisé, sans bloc vert ni flash.
-          if (index < loaded.length - 1 && local > photoDuration - .22) {
-            const a = Math.min(1, Math.max(0, (local - (photoDuration - .22)) / .22));
+
+          // Fondu plus doux : ~0,36 s. Les deux images se chevauchent
+          // proprement au lieu de donner une impression de changement brutal.
+          const transitionDuration = Math.min(
+            0.36,
+            currentDuration * 0.22,
+            index < photoDurations.length - 1 ? photoDurations[index + 1] * 0.22 : 0.36
+          );
+
+          if (index < loaded.length - 1 && local > 1 - (transitionDuration / currentDuration)) {
+            const transitionProgress =
+              (local - (1 - transitionDuration / currentDuration)) /
+              (transitionDuration / currentDuration);
+
             ctx.save();
-            ctx.globalAlpha = a;
-            drawStoryPhotoFrame(ctx, p, loaded[index + 1], index + 1, loaded.length, 0, W, H, logo, false);
+            ctx.globalAlpha = Math.max(0, Math.min(1, transitionProgress));
+            drawStoryPhotoFrame(
+              ctx, p, loaded[index + 1], index + 1, loaded.length,
+              0, W, H, logo, false
+            );
             ctx.restore();
           }
         } else {
