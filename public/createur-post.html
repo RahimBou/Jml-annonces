@@ -78,11 +78,11 @@ const $=id=>document.getElementById(id);
 let slides=[], audioFile=null, videoBlob=null, videoUrl=null;
 
 function naturalNumber(name){
-  const m=name.match(/(?:^|[^0-9])(\\d+)(?:[^0-9]|$)/);
+  const m=name.match(/(?:^|[^0-9])(\d+)(?:[^0-9]|$)/);
   return m?Number(m[1]):9999;
 }
 function cleanName(name){return name.split('/').pop();}
-function isImage(file){return /\\.(jpe?g|png|webp|gif|bmp)$/i.test(file.name||'');}
+function isImage(file){return /\.(jpe?g|png|webp|gif|bmp)$/i.test(file.name||'');}
 
 async function imageFromBlob(blob){
   const url=URL.createObjectURL(blob);
