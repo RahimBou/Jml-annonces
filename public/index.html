@@ -1344,15 +1344,16 @@ function downloadStoryFile() {
 }
 
 async function shareStoryVideo() {
-  if (!currentStoryBlob) {
+  if (!currentStoryBlob || !currentStoryUrl) {
     alert("Crée d'abord la Story vidéo.");
     return;
   }
 
   const ref = currentData?.listing?.reference || "annonce";
+  const fileName = "JML-Story-" + ref + ".webm";
   const file = new File(
     [currentStoryBlob],
-    "JML-Story-" + ref + ".webm",
+    fileName,
     { type: currentStoryBlob.type || "video/webm" }
   );
   const text = currentSocialText("instagram") || currentSocialText("facebook") || "";
@@ -1362,31 +1363,59 @@ async function shareStoryVideo() {
     url: currentListingUrl()
   };
 
+  // Sur ordinateur, le partage natif n'est pas fiable pour une vidéo WebM.
+  // On force donc une action utile : téléchargement immédiat.
+  const isTouchDevice = window.matchMedia?.("(pointer: coarse)")?.matches ||
+    navigator.maxTouchPoints > 0;
+  if (!isTouchDevice) {
+    downloadStoryFile();
+    $("storyStatus").textContent =
+      "📥 Story téléchargée. Sur ordinateur, ajoute maintenant le fichier dans Facebook ou Instagram.";
+    return;
+  }
+
   try {
-    // File sharing is only attempted when the browser explicitly reports
-    // that this exact video file can be shared.
-    if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-      await navigator.share({ title: shareData.title, text: shareData.text, files: [file] });
-      $("storyStatus").textContent = "🟢 Story envoyée au menu de partage de l'appareil.";
+    // Sur mobile/tablette, ne tente le partage vidéo que si le navigateur
+    // confirme explicitement qu'il accepte ce fichier précis.
+    if (navigator.share && navigator.canShare &&
+        navigator.canShare({ files: [file] })) {
+      await navigator.share({
+        title: shareData.title,
+        text: shareData.text,
+        files: [file]
+      });
+      $("storyStatus").textContent =
+        "🟢 Menu de partage ouvert avec la Story vidéo.";
       return;
     }
 
-    // Some browsers can share a URL/text but cannot attach a WebM file.
-    if (navigator.share && navigator.canShare && navigator.canShare({ title: shareData.title, text: shareData.text, url: shareData.url })) {
+    // Si le fichier WebM n'est pas partageable, on essaie au moins le lien
+    // de l'annonce, puis on télécharge toujours la vidéo.
+    if (navigator.share && navigator.canShare &&
+        navigator.canShare({
+          title: shareData.title,
+          text: shareData.text,
+          url: shareData.url
+        })) {
       await navigator.share(shareData);
-      $("storyStatus").textContent = "🟢 Lien de l'annonce partagé. La vidéo reste disponible avec « Télécharger la Story ».";
+      downloadStoryFile();
+      $("storyStatus").textContent =
+        "🟢 Lien partagé. La Story vidéo a aussi été téléchargée pour l'ajouter à Instagram/Facebook.";
       return;
     }
 
     downloadStoryFile();
-    $("storyStatus").textContent = "📥 Ce navigateur ne permet pas le partage direct de cette vidéo. La Story a été téléchargée : ouvre ensuite Facebook ou Instagram pour l'ajouter.";
+    $("storyStatus").textContent =
+      "📥 Partage vidéo non disponible sur cet appareil. La Story a été téléchargée.";
   } catch (error) {
     if (error?.name === "AbortError") {
-      $("storyStatus").textContent = "ℹ️ Partage annulé. La Story est toujours disponible.";
+      $("storyStatus").textContent =
+        "ℹ️ Partage annulé. La Story reste disponible.";
       return;
     }
     downloadStoryFile();
-    $("storyStatus").textContent = "📥 Partage direct indisponible ici. La Story a été téléchargée automatiquement.";
+    $("storyStatus").textContent =
+      "📥 Partage direct indisponible. La Story a été téléchargée automatiquement.";
   }
 }
 
