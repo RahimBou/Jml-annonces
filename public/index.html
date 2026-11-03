@@ -225,6 +225,17 @@
         <label style="font-size:14px">Volume <input id="storyAudioVolume" type="range" min="5" max="40" value="18" step="1"> <span id="storyAudioVolumeValue">18%</span></label>
       </div>
       <div id="storyAudioLibrary" style="display:grid;gap:8px;margin-top:12px"></div>
+      <div id="storyAudioEditor" style="margin-top:14px;padding:14px;border:1px solid rgba(23,56,47,.16);border-radius:12px;background:#fff">
+        <div style="font-weight:800;color:var(--green)">🎚️ Début de la chanson pour cette Story</div>
+        <div class="photo-meta">Choisis le passage de ta musique. La Story utilisera la durée disponible à partir de ce point, sans recommencer au début.</div>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:10px">
+          <strong id="storyAudioStartLabel" style="font-size:22px;color:var(--green);font-variant-numeric:tabular-nums">00:00</strong>
+          <input id="storyAudioStart" type="range" min="0" max="180" step="1" value="0" style="flex:1;min-width:180px">
+          <span id="storyAudioDuration" class="photo-meta">Durée : —</span>
+        </div>
+        <audio id="storyAudioPreview" controls preload="metadata" style="width:100%;margin-top:8px"></audio>
+        <div id="storyAudioEditorStatus" class="photo-meta">Sélectionne un MP3 de ta bibliothèque pour écouter et choisir son point de départ.</div>
+      </div>
       <div id="storyAudioStatus" class="photo-meta" style="margin-top:8px">Aucun son personnel ajouté.</div>
     </div>
     <div id="storyStatus" class="photo-meta" style="margin-top:10px">La Story sera construite à partir des photos et informations vérifiées de l'annonce.</div>
@@ -252,6 +263,48 @@ let currentData = null;
 let currentStoryBlob = null;
 let currentStoryUrl = null;
 let selectedStoryAudioId = "";
+let storyAudioStartSeconds = Math.max(0, Number(localStorage.getItem("jmlStoryAudioStartSeconds") || 0));
+let storyAudioPreviewObjectUrl = null;
+let storyAudioDecodedDuration = 0;
+
+function formatStoryTime(seconds) {
+  const safe = Math.max(0, Math.floor(Number(seconds) || 0));
+  return String(Math.floor(safe / 60)).padStart(2, "0") + ":" + String(safe % 60).padStart(2, "0");
+}
+
+function updateStoryAudioStartUI() {
+  const slider = $("storyAudioStart");
+  if (!slider) return;
+  const max = Math.max(0, Math.floor(storyAudioDecodedDuration || 0));
+  slider.max = String(max);
+  if (storyAudioStartSeconds > max) storyAudioStartSeconds = 0;
+  slider.value = String(Math.min(max, storyAudioStartSeconds));
+  $("storyAudioStartLabel").textContent = formatStoryTime(storyAudioStartSeconds);
+  $("storyAudioDuration").textContent = "Durée : " + (max ? formatStoryTime(max) : "—");
+}
+
+async function configureStoryAudioEditor(blob, label) {
+  const preview = $("storyAudioPreview");
+  const status = $("storyAudioEditorStatus");
+  storyAudioDecodedDuration = 0;
+  if (storyAudioPreviewObjectUrl) URL.revokeObjectURL(storyAudioPreviewObjectUrl);
+  storyAudioPreviewObjectUrl = null;
+  preview.removeAttribute("src");
+  preview.load();
+  if (!blob) { updateStoryAudioStartUI(); status.textContent = label || "Aucun fichier audio sélectionné."; return; }
+  storyAudioPreviewObjectUrl = URL.createObjectURL(blob);
+  preview.src = storyAudioPreviewObjectUrl;
+  await new Promise(resolve => {
+    const done = () => { preview.removeEventListener("loadedmetadata", done); preview.removeEventListener("error", done); resolve(); };
+    preview.addEventListener("loadedmetadata", done, { once: true });
+    preview.addEventListener("error", done, { once: true });
+    preview.load();
+  });
+  storyAudioDecodedDuration = Number.isFinite(preview.duration) ? preview.duration : 0;
+  if (storyAudioStartSeconds > storyAudioDecodedDuration) storyAudioStartSeconds = 0;
+  updateStoryAudioStartUI();
+  status.textContent = storyAudioDecodedDuration ? label + " · Déplace le curseur puis écoute pour vérifier le passage." : "Impossible de lire les métadonnées de ce fichier audio.";
+}
 let storyAudioDbPromise = null;
 
 
@@ -384,9 +437,11 @@ async function renderStoryAudioLibrary() {
       radio.name = "storyAudio";
       radio.value = sound.id;
       radio.checked = selectedStoryAudioId === sound.id;
-      radio.addEventListener("change", () => {
+      radio.addEventListener("change", async () => {
         selectedStoryAudioId = sound.id;
         $("storyAudioStatus").textContent = "🎵 Son sélectionné : " + sound.name;
+        try { await configureStoryAudioEditor(sound.blob, "Musique sélectionnée : " + sound.name); }
+        catch (error) { $("storyAudioEditorStatus").textContent = error.message || "Prévisualisation impossible."; }
       });
       const label = document.createElement("span");
       label.textContent = sound.name + " · " + formatAudioSize(sound.size);
@@ -444,11 +499,26 @@ async function initStoryAudioLibrary() {
     selectedStoryAudioId = "";
     $("storyAudioStatus").textContent = "🔇 La prochaine Story sera créée sans musique.";
   });
-  document.querySelector('input[name="storyAudio"][value="__JML_SIGNATURE__"]')?.addEventListener("change", () => {
+  document.querySelector('input[name="storyAudio"][value="__JML_SIGNATURE__"]')?.addEventListener("change", async () => {
     selectedStoryAudioId = "__JML_SIGNATURE__";
-    $("storyAudioStatus").textContent = "🎵 Signature sonore JML sélectionnée — elle sera intégrée automatiquement."; 
+    $("storyAudioStatus").textContent = "🎵 Signature sonore JML sélectionnée — elle sera intégrée automatiquement.";
+    await configureStoryAudioEditor(null, "La signature synthétique JML démarre à la position choisie. La préécoute MP3 est disponible pour les sons importés.");
+    storyAudioDecodedDuration = 60;
+    updateStoryAudioStartUI();
   });
   selectedStoryAudioId = "__JML_SIGNATURE__";
+  const startSlider = $("storyAudioStart");
+  startSlider.value = String(storyAudioStartSeconds);
+  startSlider.addEventListener("input", () => {
+    storyAudioStartSeconds = Number(startSlider.value || 0);
+    $("storyAudioStartLabel").textContent = formatStoryTime(storyAudioStartSeconds);
+    localStorage.setItem("jmlStoryAudioStartSeconds", String(storyAudioStartSeconds));
+    const preview = $("storyAudioPreview");
+    if (preview.src && Number.isFinite(preview.duration)) preview.currentTime = Math.min(storyAudioStartSeconds, Math.max(0, preview.duration - 0.1));
+  });
+  await configureStoryAudioEditor(null, "Sélectionne un MP3 de ta bibliothèque pour choisir précisément son point de départ.");
+  storyAudioDecodedDuration = 60;
+  updateStoryAudioStartUI();
   await renderStoryAudioLibrary();
 }
 
@@ -1718,7 +1788,11 @@ async function createStoryVideo() {
     });
 
     recorder.start(100);
-    if (audioSource) audioSource.start(0);
+    if (audioSource) {
+      const safeOffset = Math.min(storyAudioStartSeconds, Math.max(0, audioBuffer.duration - 0.05));
+      const remainingAudio = Math.max(0.05, Math.min(duration, audioBuffer.duration - safeOffset));
+      audioSource.start(0, safeOffset, remainingAudio);
+    }
     const start = performance.now();
 
     await new Promise(resolve => {
