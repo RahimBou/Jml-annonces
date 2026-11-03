@@ -578,6 +578,42 @@ async function publishInstagramVideoStory(account, videoBuffer, graphBase, req) 
 }
 
 app.post(
+  "/api/social/story-download",
+  express.raw({ type: ["video/webm", "video/mp4", "application/octet-stream"], limit: "60mb" }),
+  async (req, res) => {
+    const requestId = crypto.randomBytes(6).toString("hex");
+    try {
+      if (!Buffer.isBuffer(req.body) || req.body.length < 1000) {
+        return res.status(400).json({ ok: false, requestId, error: "Fichier vidéo Story manquant ou vide." });
+      }
+      if (req.body.length > 60 * 1024 * 1024) {
+        return res.status(413).json({ ok: false, requestId, error: "La Story dépasse la limite de 60 Mo." });
+      }
+      const contentType = String(req.headers["content-type"] || "").split(";")[0].toLowerCase();
+      if (!["video/webm", "video/mp4", "application/octet-stream"].includes(contentType)) {
+        return res.status(415).json({ ok: false, requestId, error: "Format vidéo non pris en charge." });
+      }
+      const mp4Buffer = contentType === "video/mp4" ? req.body : await convertStoryToMp4(req.body);
+      res.set({
+        "Content-Type": "video/mp4",
+        "Content-Length": String(mp4Buffer.length),
+        "Content-Disposition": 'attachment; filename="JML-Story.mp4"',
+        "Cache-Control": "no-store",
+        "X-Content-Type-Options": "nosniff"
+      });
+      return res.status(200).end(mp4Buffer);
+    } catch (error) {
+      console.error("[JML Story download] " + requestId, error);
+      return res.status(500).json({
+        ok: false,
+        requestId,
+        error: error.message || "Conversion MP4 impossible."
+      });
+    }
+  }
+);
+
+app.post(
   "/api/social/publish/story",
   express.raw({ type: ["video/webm", "video/mp4", "application/octet-stream"], limit: "60mb" }),
   async (req, res) => {
