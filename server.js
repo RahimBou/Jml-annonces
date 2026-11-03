@@ -20,8 +20,8 @@ app.get("/data-deletion", (req, res) => res.sendFile(path.join(__dirname, "publi
 
 
 /* -------------------------------------------------------------------------- */
-/* Social accounts — OAuth connection only                                   */
-/* Publication remains a deliberate human action in the UI.                  */
+/* Social accounts — OAuth connection and user-validated publishing        */
+/* Posts and Stories are only published after an explicit UI action.          */
 /* Tokens are encrypted in an HttpOnly cookie so no password is ever stored. */
 /* -------------------------------------------------------------------------- */
 
