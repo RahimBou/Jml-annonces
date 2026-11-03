@@ -507,11 +507,40 @@ async function publishFacebookVideoStory(account, videoBuffer, graphBase) {
   );
   const finish = await metaJson(finishResponse, "Meta n'a pas pu publier la Story Facebook.");
   if (finish.success === false) throw new Error("Meta n'a pas confirmé la publication de la Story Facebook.");
+
+  // La réponse "success" confirme la fin de la requête, pas la présence effective
+  // de la Story dans les Stories publiées de la Page. On vérifie le média côté Page.
+  let publishedStory = null;
+  let lastStoriesError = null;
+  for (let attempt = 0; attempt < 12; attempt++) {
+    await delay(5000);
+    try {
+      const storiesResponse = await fetch(
+        graphBase + "/" + encodeURIComponent(account.pageId) +
+        "/stories?fields=post_id,media_id,status,creation_time,url&limit=25&access_token=" +
+        encodeURIComponent(account.accessToken)
+      );
+      const stories = await metaJson(storiesResponse, "Impossible de vérifier les Stories publiées sur la Page Facebook.");
+      publishedStory = (stories.data || []).find(
+        item => String(item.media_id || "") === String(start.video_id) &&
+          String(item.status || "").toLowerCase() === "published"
+      );
+      if (publishedStory) break;
+    } catch (error) {
+      lastStoriesError = error;
+    }
+  }
+  if (!publishedStory) {
+    const detail = lastStoriesError ? " Vérification Meta impossible : " + lastStoriesError.message : "";
+    throw new Error("Meta a accepté l'envoi, mais la Story n'apparaît pas comme publiée sur la Page Facebook après 60 secondes. Elle n'est donc pas confirmée comme visible." + detail);
+  }
+
   return {
     ok: true,
     pageId: account.pageId,
     videoId: String(start.video_id),
-    message: "Story envoyée à la Page Facebook JML Immobilier."
+    storyUrl: publishedStory.url || null,
+    message: "Story vérifiée comme publiée sur la Page Facebook JML Immobilier."
   };
 }
 
