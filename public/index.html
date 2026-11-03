@@ -1808,18 +1808,46 @@ async function createStoryVideo() {
   }
 }
 
-function downloadStoryFile() {
+async function downloadStoryFile() {
   if (!currentStoryBlob || !currentStoryUrl) {
     alert("Crée d'abord la Story vidéo.");
     return;
   }
-  const ref = currentData?.listing?.reference || "annonce";
-  const link = document.createElement("a");
-  link.download = "JML-Story-" + ref + ".webm";
-  link.href = currentStoryUrl;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
+  const button = $("downloadStory");
+  const status = $("storyStatus");
+  const originalLabel = button.textContent;
+  button.disabled = true;
+  button.textContent = "⏳ Préparation du MP4…";
+  status.textContent = "⏳ Conversion et vérification de la vidéo pour un téléchargement compatible Android…";
+  try {
+    const response = await fetch("/api/social/story-download", {
+      method: "POST",
+      headers: { "Content-Type": currentStoryBlob.type || "video/webm" },
+      body: currentStoryBlob
+    });
+    const contentType = response.headers.get("content-type") || "";
+    if (!response.ok || !contentType.includes("video/mp4")) {
+      const data = contentType.includes("application/json") ? await response.json().catch(() => ({})) : {};
+      throw new Error(data.error || "Le serveur n'a pas pu préparer le MP4.");
+    }
+    const mp4Blob = await response.blob();
+    if (!mp4Blob.size) throw new Error("Le MP4 reçu est vide.");
+    const mp4Url = URL.createObjectURL(mp4Blob);
+    const ref = String(currentData?.listing?.reference || "annonce").replace(/[^a-zA-Z0-9_-]/g, "-");
+    const link = document.createElement("a");
+    link.download = "JML-Story-" + ref + ".mp4";
+    link.href = mp4Url;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(mp4Url), 60000);
+    status.textContent = "🟢 MP4 vérifié et téléchargé · " + (mp4Blob.size / 1024 / 1024).toFixed(1).replace(".", ",") + " Mo.";
+  } catch (error) {
+    status.textContent = "🔴 Téléchargement impossible : " + (error.message || "erreur inconnue.");
+  } finally {
+    button.disabled = false;
+    button.textContent = originalLabel;
+  }
 }
 
 async function shareStoryVideo() {
