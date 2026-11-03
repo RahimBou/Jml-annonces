@@ -277,8 +277,7 @@ function updateStoryAudioStartUI() {
   if (!slider) return;
   const max = Math.max(0, Math.floor(storyAudioDecodedDuration || 0));
   slider.max = String(max);
-  if (storyAudioStartSeconds > max) storyAudioStartSeconds = 0;
-  slider.value = String(Math.min(max, storyAudioStartSeconds));
+  slider.value = String(Math.min(max || storyAudioStartSeconds, storyAudioStartSeconds));
   $("storyAudioStartLabel").textContent = formatStoryTime(storyAudioStartSeconds);
   $("storyAudioDuration").textContent = "Durée : " + (max ? formatStoryTime(max) : "—");
 }
@@ -301,7 +300,7 @@ async function configureStoryAudioEditor(blob, label) {
     preview.load();
   });
   storyAudioDecodedDuration = Number.isFinite(preview.duration) ? preview.duration : 0;
-  if (storyAudioStartSeconds > storyAudioDecodedDuration) storyAudioStartSeconds = 0;
+  if (storyAudioDecodedDuration && storyAudioStartSeconds > storyAudioDecodedDuration) storyAudioStartSeconds = Math.floor(storyAudioDecodedDuration);
   updateStoryAudioStartUI();
   status.textContent = storyAudioDecodedDuration ? label + " · Déplace le curseur puis écoute pour vérifier le passage." : "Impossible de lire les métadonnées de ce fichier audio.";
 }
@@ -517,7 +516,6 @@ async function initStoryAudioLibrary() {
     if (preview.src && Number.isFinite(preview.duration)) preview.currentTime = Math.min(storyAudioStartSeconds, Math.max(0, preview.duration - 0.1));
   });
   await configureStoryAudioEditor(null, "Sélectionne un MP3 de ta bibliothèque pour choisir précisément son point de départ.");
-  storyAudioDecodedDuration = 60;
   updateStoryAudioStartUI();
   await renderStoryAudioLibrary();
 }
