@@ -1266,7 +1266,19 @@ $("copyInstagram").addEventListener("click", () => copySocialText("instagram"));
 $("copyLinkedin").addEventListener("click", () => copySocialText("linkedin"));
 /* Story vidéo 9:16 — version JML plus éditoriale */
 function storyMimeType() {
-  const candidates = ["video/webm;codecs=vp9,opus","video/webm;codecs=vp8,opus","video/webm;codecs=vp9","video/webm;codecs=vp8","video/webm"];
+  // Priorité au MP4 H.264/AAC natif : aucun transcodage serveur si le navigateur le sait faire.
+  // WebM reste un repli de compatibilité pour les navigateurs qui ne proposent pas MP4.
+  const candidates = [
+    'video/mp4;codecs="avc1.42E01E,mp4a.40.2"',
+    'video/mp4;codecs="avc1,mp4a.40.2"',
+    'video/mp4;codecs=avc1',
+    "video/mp4",
+    "video/webm;codecs=vp9,opus",
+    "video/webm;codecs=vp8,opus",
+    "video/webm;codecs=vp9",
+    "video/webm;codecs=vp8",
+    "video/webm"
+  ];
   return candidates.find(type => MediaRecorder.isTypeSupported(type)) || "";
 }
 
@@ -1818,7 +1830,9 @@ async function downloadStoryFile() {
   const originalLabel = button.textContent;
   button.disabled = true;
   button.textContent = "⏳ Préparation du MP4…";
-  status.textContent = "⏳ Conversion et vérification de la vidéo pour un téléchargement compatible Android…";
+  status.textContent = currentStoryBlob.type.startsWith("video/mp4")
+    ? "⏳ Vérification et téléchargement du MP4 natif…"
+    : "⏳ Conversion de secours du WebM en MP4…";
   try {
     const response = await fetch("/api/social/story-download", {
       method: "POST",
@@ -1860,7 +1874,9 @@ async function shareStoryVideo() {
   const originalLabel = button.textContent;
   button.disabled = true;
   button.textContent = "⏳ Publication en cours…";
-  status.textContent = "⏳ Conversion vidéo et envoi sécurisé vers Facebook et Instagram…";
+  status.textContent = currentStoryBlob.type.startsWith("video/mp4")
+    ? "⏳ Envoi du MP4 natif vers Facebook et Instagram…"
+    : "⏳ Conversion de secours puis envoi vers Facebook et Instagram…";
   try {
     const response = await fetch("/api/social/publish/story", {
       method: "POST",
