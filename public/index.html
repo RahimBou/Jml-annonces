@@ -1719,6 +1719,8 @@ async function createStoryVideo() {
     let audioSource = null;
     let audioGain = null;
     let audioDestination = null;
+    let audioStartOffset = 0;
+    let audioPlaybackDuration = 0;
 
     if (selectedStoryAudioId) {
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
@@ -1735,9 +1737,11 @@ async function createStoryVideo() {
         audioBuffer = await audioContext.decodeAudioData(await sound.blob.arrayBuffer());
       }
 
+      audioStartOffset = Math.min(storyAudioStartSeconds, Math.max(0, audioBuffer.duration - 0.05));
+      audioPlaybackDuration = Math.max(0.05, Math.min(duration, audioBuffer.duration - audioStartOffset));
       audioSource = audioContext.createBufferSource();
       audioSource.buffer = audioBuffer;
-      audioSource.loop = selectedStoryAudioId !== "__JML_SIGNATURE__";
+      audioSource.loop = false;
       audioGain = audioContext.createGain();
       audioGain.gain.value = Math.max(0.03, Number($("storyAudioVolume")?.value || 18) / 100);
       audioDestination = audioContext.createMediaStreamDestination();
@@ -1788,11 +1792,7 @@ async function createStoryVideo() {
     });
 
     recorder.start(100);
-    if (audioSource) {
-      const safeOffset = Math.min(storyAudioStartSeconds, Math.max(0, audioBuffer.duration - 0.05));
-      const remainingAudio = Math.max(0.05, Math.min(duration, audioBuffer.duration - safeOffset));
-      audioSource.start(0, safeOffset, remainingAudio);
-    }
+    if (audioSource) audioSource.start(0, audioStartOffset, audioPlaybackDuration);
     const start = performance.now();
 
     await new Promise(resolve => {
