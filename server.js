@@ -637,6 +637,7 @@ app.post(
   express.raw({ type: ["video/webm", "video/mp4", "application/octet-stream"], limit: "60mb" }),
   async (req, res) => {
     const requestId = crypto.randomBytes(6).toString("hex");
+    const requestStartedAt = Date.now();
     try {
       if (!Buffer.isBuffer(req.body) || req.body.length < 1000) {
         return res.status(400).json({ ok: false, requestId, error: "Fichier vidéo Story manquant ou vide." });
