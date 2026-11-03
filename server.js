@@ -387,7 +387,8 @@ function validateStoryMp4(metadata) {
     sizeBytes: Number(format.size || 0)
   };
 }
-\nasync function convertStoryToMp4(inputBuffer) {
+
+async function convertStoryToMp4(inputBuffer) {
   if (!ffmpegPath) throw new Error("FFmpeg n'est pas disponible sur ce serveur. Vérifie l'installation de ffmpeg-static sur Render.");
   const tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "jml-story-"));
   const inputPath = path.join(tempDir, "story-input.webm");
@@ -421,6 +422,9 @@ function validateStoryMp4(metadata) {
     const stat = await fs.promises.stat(outputPath);
     if (!stat.size) throw new Error("FFmpeg a produit une vidéo MP4 vide.");
     if (stat.size > 50 * 1024 * 1024) throw new Error("La vidéo convertie dépasse la limite de 50 Mo.");
+    const metadata = await probeStoryMp4(outputPath);
+    const technicalCheck = validateStoryMp4(metadata);
+    console.log("[JML Story] MP4 validé :", JSON.stringify(technicalCheck));
     return await fs.promises.readFile(outputPath);
   } finally {
     await fs.promises.rm(tempDir, { recursive: true, force: true }).catch(() => {});
