@@ -509,15 +509,15 @@ async function publishInstagramVideoStory(account, videoBuffer, graphBase, req) 
 
 app.post(
   "/api/social/publish/story",
-  express.raw({ type: ["video/webm", "video/mp4", "application/octet-stream"], limit: "40mb" }),
+  express.raw({ type: ["video/webm", "video/mp4", "application/octet-stream"], limit: "60mb" }),
   async (req, res) => {
     const requestId = crypto.randomBytes(6).toString("hex");
     try {
       if (!Buffer.isBuffer(req.body) || req.body.length < 1000) {
         return res.status(400).json({ ok: false, requestId, error: "Fichier vidéo Story manquant ou vide." });
       }
-      if (req.body.length > 40 * 1024 * 1024) {
-        return res.status(413).json({ ok: false, requestId, error: "La Story dépasse la limite de 40 Mo." });
+      if (req.body.length > 60 * 1024 * 1024) {
+        return res.status(413).json({ ok: false, requestId, error: "La Story dépasse la limite de 60 Mo." });
       }
       const contentType = String(req.headers["content-type"] || "").split(";")[0].toLowerCase();
       if (!["video/webm", "video/mp4", "application/octet-stream"].includes(contentType)) {
