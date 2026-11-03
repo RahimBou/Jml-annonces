@@ -135,7 +135,7 @@
     <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
       <div>
         <h2 style="margin:0;color:var(--green)">🔐 Mes comptes sociaux</h2>
-        <div id="accountsStatus" class="photo-meta">Connecte tes comptes une seule fois. Aucune publication ne partira sans ta validation.</div>
+        <div id="accountsStatus" class="photo-meta">Connecte la Page Facebook JML et le compte Instagram professionnel. Les Stories seront envoyées après validation dans cette application.</div>
       </div>
       <button id="refreshAccounts" style="background:#6f746f">Actualiser</button>
     </div>
@@ -195,7 +195,7 @@
         </select>
       </label>
       <button id="generateStory" style="background:#b28b3f">🎬 Créer la Story</button>
-      <button id="shareStory" style="background:#17382f" disabled>📤 Partager la Story</button>
+      <button id="shareStory" style="background:#17382f" disabled>🚀 Publier la Story sur Facebook + Instagram</button>
     </div>
 
     </div>
@@ -1083,7 +1083,7 @@ async function loadSocialAccounts() {
     }
     $("accountsStatus").textContent = data.configured === false
       ? "⚠️ Les identifiants OAuth ne sont pas encore configurés sur Render."
-      : "Les comptes sont connectés séparément. La publication reste toujours manuelle.";
+      : "Les comptes sont connectés séparément. Les posts et Stories partent uniquement après validation dans cette application.";
   } catch {
     $("accountsStatus").textContent = "Impossible de vérifier les comptes sociaux.";
   }
@@ -1827,74 +1827,41 @@ async function shareStoryVideo() {
     alert("Crée d'abord la Story vidéo.");
     return;
   }
-
-  const ref = currentData?.listing?.reference || "annonce";
-  const fileName = "JML-Story-" + ref + ".webm";
-  const file = new File(
-    [currentStoryBlob],
-    fileName,
-    { type: currentStoryBlob.type || "video/webm" }
-  );
-  const text = currentSocialText("instagram") || currentSocialText("facebook") || "";
-  const shareData = {
-    title: "JML Immobilier — Story",
-    text,
-    url: currentListingUrl()
-  };
-
-  // Sur ordinateur, le partage natif n'est pas fiable pour une vidéo WebM.
-  // On force donc une action utile : téléchargement immédiat.
-  const isTouchDevice = window.matchMedia?.("(pointer: coarse)")?.matches ||
-    navigator.maxTouchPoints > 0;
-  if (!isTouchDevice) {
-    downloadStoryFile();
-    $("storyStatus").textContent =
-      "📥 Story téléchargée. Sur ordinateur, ajoute maintenant le fichier dans Facebook ou Instagram.";
-    return;
-  }
-
+  const button = $("shareStory");
+  const status = $("storyStatus");
+  const originalLabel = button.textContent;
+  button.disabled = true;
+  button.textContent = "⏳ Publication en cours…";
+  status.textContent = "⏳ Conversion vidéo et envoi sécurisé vers Facebook et Instagram…";
   try {
-    // Sur mobile/tablette, ne tente le partage vidéo que si le navigateur
-    // confirme explicitement qu'il accepte ce fichier précis.
-    if (navigator.share && navigator.canShare &&
-        navigator.canShare({ files: [file] })) {
-      await navigator.share({
-        title: shareData.title,
-        text: shareData.text,
-        files: [file]
-      });
-      $("storyStatus").textContent =
-        "🟢 Menu de partage ouvert avec la Story vidéo.";
+    const response = await fetch("/api/social/publish/story", {
+      method: "POST",
+      headers: { "Content-Type": currentStoryBlob.type || "video/webm" },
+      body: currentStoryBlob
+    });
+    const data = await response.json().catch(() => ({}));
+    if (data.results) {
+      const facebook = data.results.facebook;
+      const instagram = data.results.instagram;
+      const facebookText = facebook?.ok
+        ? "Facebook : Story publiée sur la Page JML Immobilier."
+        : "Facebook : échec — " + (facebook?.error || "résultat indisponible.");
+      const instagramText = instagram?.ok
+        ? "Instagram : Story publiée sur le compte professionnel."
+        : "Instagram : échec — " + (instagram?.error || "résultat indisponible.");
+      status.textContent = data.ok
+        ? "🟢 " + facebookText + " " + instagramText
+        : "⚠️ Publication incomplète. " + facebookText + " " + instagramText + " Le téléchargement reste disponible ci-dessous.";
       return;
     }
-
-    // Si le fichier WebM n'est pas partageable, on essaie au moins le lien
-    // de l'annonce, puis on télécharge toujours la vidéo.
-    if (navigator.share && navigator.canShare &&
-        navigator.canShare({
-          title: shareData.title,
-          text: shareData.text,
-          url: shareData.url
-        })) {
-      await navigator.share(shareData);
-      downloadStoryFile();
-      $("storyStatus").textContent =
-        "🟢 Lien partagé. La Story vidéo a aussi été téléchargée pour l'ajouter à Instagram/Facebook.";
-      return;
-    }
-
-    downloadStoryFile();
-    $("storyStatus").textContent =
-      "📥 Partage vidéo non disponible sur cet appareil. La Story a été téléchargée.";
+    throw new Error(data.error || "Le serveur n'a pas pu publier la Story.");
   } catch (error) {
-    if (error?.name === "AbortError") {
-      $("storyStatus").textContent =
-        "ℹ️ Partage annulé. La Story reste disponible.";
-      return;
-    }
-    downloadStoryFile();
-    $("storyStatus").textContent =
-      "📥 Partage direct indisponible. La Story a été téléchargée automatiquement.";
+    status.textContent = "🔴 Publication automatique impossible : " +
+      (error.message || "erreur inconnue.") +
+      " La vidéo reste disponible avec le bouton Télécharger la Story.";
+  } finally {
+    button.disabled = false;
+    button.textContent = originalLabel;
   }
 }
 
