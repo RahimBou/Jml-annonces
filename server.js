@@ -467,6 +467,10 @@ async function publishFacebookVideoStory(account, videoBuffer, graphBase) {
   );
   const page = await metaJson(pageResponse, "Jeton de la Page Facebook invalide.");
   if (String(page.id || "") !== String(account.pageId)) throw new Error("Le jeton ne correspond pas à la Page Facebook enregistrée.");
+  console.log("[JML Story Facebook] Page destinataire vérifiée", JSON.stringify({
+    pageId: page.id,
+    pageName: page.name || null
+  }));
 
   const startResponse = await fetch(
     graphBase + "/" + encodeURIComponent(account.pageId) +
@@ -475,6 +479,11 @@ async function publishFacebookVideoStory(account, videoBuffer, graphBase) {
   );
   const start = await metaJson(startResponse, "Meta n'a pas pu initialiser la Story Facebook.");
   if (!start.video_id || !start.upload_url) throw new Error("Meta n'a pas retourné les informations de transfert vidéo Facebook.");
+  console.log("[JML Story Facebook] Identifiant vidéo attribué par Meta", JSON.stringify({
+    pageId: account.pageId,
+    pageName: page.name || null,
+    videoId: String(start.video_id)
+  }));
   const uploadUrl = new URL(start.upload_url);
   if (uploadUrl.protocol !== "https:" || uploadUrl.hostname !== "rupload.facebook.com") {
     throw new Error("Meta a retourné une adresse de transfert vidéo inattendue.");
@@ -506,6 +515,11 @@ async function publishFacebookVideoStory(account, videoBuffer, graphBase) {
     }
   );
   const finish = await metaJson(finishResponse, "Meta n'a pas pu publier la Story Facebook.");
+  console.log("[JML Story Facebook] Réponse Meta finish", JSON.stringify({
+    pageId: account.pageId,
+    videoId: String(start.video_id),
+    response: finish
+  }));
   if (finish.success === false) throw new Error("Meta n'a pas confirmé la publication de la Story Facebook.");
 
   // La réponse "success" confirme la fin de la requête, pas la présence effective
