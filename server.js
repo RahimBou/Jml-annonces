@@ -6,6 +6,7 @@ const { spawn } = require("child_process");
 const fs = require("fs");
 const os = require("os");
 const ffmpegPath = require("ffmpeg-static");
+const ffprobePath = require("ffprobe-static").path;
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -321,7 +322,72 @@ async function metaJson(response, fallback) {
   return payload;
 }
 
-async function convertStoryToMp4(inputBuffer) {
+
+function probeStoryMp4(filePath) {
+  if (!ffprobePath) throw new Error("FFprobe n'est pas disponible sur ce serveur.");
+  return new Promise((resolve, reject) => {
+    const child = spawn(ffprobePath, [
+      "-v", "error", "-show_streams", "-show_format", "-of", "json", filePath
+    ], { stdio: ["ignore", "pipe", "pipe"] });
+    let stdout = "";
+    let stderr = "";
+    const timeout = setTimeout(() => {
+      child.kill("SIGKILL");
+      reject(new Error("L'analyse technique du MP4 a dépassé le délai autorisé."));
+    }, 20000);
+    timeout.unref?.();
+    child.stdout.on("data", chunk => { stdout = (stdout + chunk.toString()).slice(-200000); });
+    child.stderr.on("data", chunk => { stderr = (stderr + chunk.toString()).slice(-5000); });
+    child.on("error", error => { clearTimeout(timeout); reject(error); });
+    child.on("close", code => {
+      clearTimeout(timeout);
+      if (code !== 0) return reject(new Error("Analyse FFprobe impossible : " + (stderr.trim() || "erreur inconnue.")));
+      try { resolve(JSON.parse(stdout)); }
+      catch { reject(new Error("FFprobe a retourné des métadonnées MP4 invalides.")); }
+    });
+  });
+}
+
+function validateStoryMp4(metadata) {
+  const streams = Array.isArray(metadata?.streams) ? metadata.streams : [];
+  const video = streams.find(stream => stream.codec_type === "video");
+  const audio = streams.find(stream => stream.codec_type === "audio");
+  const format = metadata?.format || {};
+  const duration = Number(video?.duration || format.duration);
+  const frameRate = String(video?.avg_frame_rate || "");
+  const [fpsNumerator, fpsDenominator] = frameRate.split("/").map(Number);
+  const fps = fpsDenominator ? fpsNumerator / fpsDenominator : Number(frameRate);
+  const failures = [];
+
+  if (!video) failures.push("flux vidéo absent");
+  if (video && (Number(video.width) !== 1080 || Number(video.height) !== 1920)) failures.push("dimensions différentes de 1080 × 1920");
+  if (video && video.codec_name !== "h264") failures.push("codec vidéo différent de H.264");
+  if (video && video.pix_fmt !== "yuv420p") failures.push("format de pixels différent de yuv420p");
+  if (video && video.field_order && !["progressive", "unknown"].includes(video.field_order)) failures.push("vidéo entrelacée");
+  if (video && video.sample_aspect_ratio && !["1:1", "N/A"].includes(video.sample_aspect_ratio)) failures.push("pixels non carrés");
+  if (video && (!Number.isFinite(fps) || Math.abs(fps - 30) > 0.05)) failures.push("cadence différente de 30 images/s");
+  if (!Number.isFinite(duration) || duration < 3 || duration > 60.5) failures.push("durée hors limites (3 à 60 secondes)");
+  if (audio && audio.codec_name !== "aac") failures.push("codec audio différent de AAC");
+  if (audio && Number(audio.sample_rate) !== 48000) failures.push("fréquence audio différente de 48 kHz");
+  if (audio && Number(audio.channels) !== 2) failures.push("audio non stéréo");
+
+  if (failures.length) {
+    throw new Error("MP4 refusé avant publication : " + failures.join("; ") + ".");
+  }
+  return {
+    width: Number(video.width),
+    height: Number(video.height),
+    videoCodec: video.codec_name,
+    pixelFormat: video.pix_fmt,
+    frameRate: Number(fps.toFixed(3)),
+    durationSeconds: Number(duration.toFixed(2)),
+    audioCodec: audio?.codec_name || "absent",
+    audioSampleRate: audio ? Number(audio.sample_rate) : null,
+    audioChannels: audio ? Number(audio.channels) : 0,
+    sizeBytes: Number(format.size || 0)
+  };
+}
+\nasync function convertStoryToMp4(inputBuffer) {
   if (!ffmpegPath) throw new Error("FFmpeg n'est pas disponible sur ce serveur. Vérifie l'installation de ffmpeg-static sur Render.");
   const tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "jml-story-"));
   const inputPath = path.join(tempDir, "story-input.webm");
@@ -333,7 +399,7 @@ async function convertStoryToMp4(inputBuffer) {
         "-hide_banner", "-loglevel", "error", "-y", "-i", inputPath,
         "-map", "0:v:0", "-map", "0:a?",
         "-vf", "scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2,setsar=1",
-        "-r", "30", "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+        "-r", "30", "-fps_mode", "cfr", "-c:v", "libx264", "-profile:v", "high", "-level:v", "4.1", "-preset", "veryfast", "-crf", "23", "-g", "60", "-keyint_min", "60", "-sc_threshold", "0", "-flags", "+cgop",
         "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "128k", "-ar", "48000",
         "-ac", "2", "-movflags", "+faststart", outputPath
       ];
