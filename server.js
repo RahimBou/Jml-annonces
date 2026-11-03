@@ -525,12 +525,9 @@ async function publishInstagramVideoStory(account, videoBuffer, graphBase, req) 
     const mediaUrl = appBaseUrl(req) + "/api/social/story-media/" + token;
     const profileResponse = await fetch(
       graphBase + "/" + encodeURIComponent(account.instagramBusinessAccountId) +
-      "?fields=id,username,account_type&access_token=" + encodeURIComponent(account.accessToken)
+      "?fields=id,username&access_token=" + encodeURIComponent(account.accessToken)
     );
     const profile = await metaJson(profileResponse, "Impossible de vérifier le compte Instagram professionnel.");
-    if (profile.account_type && profile.account_type !== "BUSINESS") {
-      throw new Error("La publication de Stories par cette API nécessite un compte Instagram de type Business. Type détecté : " + profile.account_type + ".");
-    }
 
     const createResponse = await fetch(
       graphBase + "/" + encodeURIComponent(account.instagramBusinessAccountId) + "/media",
