@@ -389,6 +389,13 @@ function validateStoryMp4(metadata) {
 }
 
 async function convertStoryToMp4(inputBuffer) {
+  const startedAt = Date.now();
+  const memoryAtStart = process.memoryUsage();
+  console.log("[JML Story] Conversion démarrée", JSON.stringify({
+    inputBytes: inputBuffer?.length || 0,
+    rssMb: Math.round(memoryAtStart.rss / 1024 / 1024),
+    heapUsedMb: Math.round(memoryAtStart.heapUsed / 1024 / 1024)
+  }));
   if (!ffmpegPath) throw new Error("FFmpeg n'est pas disponible sur ce serveur. Vérifie l'installation de ffmpeg-static sur Render.");
   const tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "jml-story-"));
   const inputPath = path.join(tempDir, "story-input.webm");
@@ -424,7 +431,12 @@ async function convertStoryToMp4(inputBuffer) {
     if (stat.size > 50 * 1024 * 1024) throw new Error("La vidéo convertie dépasse la limite de 50 Mo.");
     const metadata = await probeStoryMp4(outputPath);
     const technicalCheck = validateStoryMp4(metadata);
-    console.log("[JML Story] MP4 validé :", JSON.stringify(technicalCheck));
+    console.log("[JML Story] MP4 validé :", JSON.stringify({
+      ...technicalCheck,
+      conversionMs: Date.now() - startedAt,
+      rssMb: Math.round(process.memoryUsage().rss / 1024 / 1024),
+      heapUsedMb: Math.round(process.memoryUsage().heapUsed / 1024 / 1024)
+    }));
     return await fs.promises.readFile(outputPath);
   } finally {
     await fs.promises.rm(tempDir, { recursive: true, force: true }).catch(() => {});
@@ -582,6 +594,13 @@ app.post(
   express.raw({ type: ["video/webm", "video/mp4", "application/octet-stream"], limit: "60mb" }),
   async (req, res) => {
     const requestId = crypto.randomBytes(6).toString("hex");
+    const requestStartedAt = Date.now();
+    console.log("[JML Story] Requête publication reçue", JSON.stringify({
+      requestId,
+      contentType: req.headers["content-type"] || null,
+      contentLength: Number(req.headers["content-length"] || 0),
+      rssMb: Math.round(process.memoryUsage().rss / 1024 / 1024)
+    }));
     try {
       if (!Buffer.isBuffer(req.body) || req.body.length < 1000) {
         return res.status(400).json({ ok: false, requestId, error: "Fichier vidéo Story manquant ou vide." });
@@ -642,24 +661,56 @@ app.post(
       }
 
       const graphBase = "https://graph.facebook.com/" + (process.env.META_GRAPH_VERSION || "v23.0");
+      console.log("[JML Story] Début préparation vidéo", JSON.stringify({
+        requestId,
+        inputBytes: req.body.length,
+        inputType: contentType,
+        rssMb: Math.round(process.memoryUsage().rss / 1024 / 1024)
+      }));
       const videoBuffer = contentType === "video/mp4" ? req.body : await convertStoryToMp4(req.body);
+      console.log("[JML Story] Vidéo prête pour Meta", JSON.stringify({
+        requestId,
+        outputBytes: videoBuffer.length,
+        preparationMs: Date.now() - requestStartedAt,
+        rssMb: Math.round(process.memoryUsage().rss / 1024 / 1024)
+      }));
       const results = {};
 
       if (facebookAccount?.accessToken && facebookAccount?.pageId) {
-        try { results.facebook = await publishFacebookVideoStory(facebookAccount, videoBuffer, graphBase); }
-        catch (error) { results.facebook = { ok: false, error: error.message || "Échec de la publication Facebook." }; }
+        try {
+          console.log("[JML Story] Envoi Facebook démarré", JSON.stringify({ requestId, videoBytes: videoBuffer.length }));
+          results.facebook = await publishFacebookVideoStory(facebookAccount, videoBuffer, graphBase);
+          console.log("[JML Story] Résultat Facebook", JSON.stringify({ requestId, ok: results.facebook.ok === true }));
+        } catch (error) {
+          console.error("[JML Story] Échec Facebook", JSON.stringify({ requestId, message: error.message, stack: error.stack }));
+          results.facebook = { ok: false, error: error.message || "Échec de la publication Facebook." };
+        }
       } else {
         results.facebook = { ok: false, error: "Page Facebook JML non connectée." };
       }
 
       if (instagramAccount?.accessToken && instagramAccount?.instagramBusinessAccountId) {
-        try { results.instagram = await publishInstagramVideoStory(instagramAccount, videoBuffer, graphBase, req); }
-        catch (error) { results.instagram = { ok: false, error: error.message || "Échec de la publication Instagram." }; }
+        try {
+          console.log("[JML Story] Envoi Instagram démarré", JSON.stringify({ requestId, videoBytes: videoBuffer.length }));
+          results.instagram = await publishInstagramVideoStory(instagramAccount, videoBuffer, graphBase, req);
+          console.log("[JML Story] Résultat Instagram", JSON.stringify({ requestId, ok: results.instagram.ok === true }));
+        } catch (error) {
+          console.error("[JML Story] Échec Instagram", JSON.stringify({ requestId, message: error.message, stack: error.stack }));
+          results.instagram = { ok: false, error: error.message || "Échec de la publication Instagram." };
+        }
       } else {
         results.instagram = { ok: false, error: "Compte Instagram professionnel non connecté à la Page Facebook JML." };
       }
 
       const ok = results.facebook.ok === true && results.instagram.ok === true;
+      console.log("[JML Story] Publication terminée", JSON.stringify({
+        requestId,
+        ok,
+        totalMs: Date.now() - requestStartedAt,
+        rssMb: Math.round(process.memoryUsage().rss / 1024 / 1024),
+        facebookOk: results.facebook.ok === true,
+        instagramOk: results.instagram.ok === true
+      }));
       return res.status(ok ? 200 : 207).json({
         ok,
         requestId,
@@ -667,6 +718,14 @@ app.post(
         message: ok ? "Story publiée sur Facebook et Instagram." : "Publication partielle : consulte le résultat de chaque réseau."
       });
     } catch (error) {
+      console.error("[JML Story] Erreur fatale de publication", JSON.stringify({
+        requestId,
+        message: error.message,
+        stack: error.stack,
+        totalMs: Date.now() - requestStartedAt,
+        rssMb: Math.round(process.memoryUsage().rss / 1024 / 1024),
+        heapUsedMb: Math.round(process.memoryUsage().heapUsed / 1024 / 1024)
+      }));
       return res.status(500).json({
         ok: false,
         requestId,
