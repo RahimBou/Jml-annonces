@@ -171,7 +171,7 @@
     <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
       <div>
         <h2 style="margin:0;color:var(--green)">🎬 Story vidéo JML — nouvelle version</h2>
-        <div class="photo-meta">13 secondes · 9:16 · photos originales vérifiées · accroche, découverte du bien, signature sonore JML et écran final.</div>
+        <div class="photo-meta">60 secondes maximum · 9:16 · photos originales vérifiées · accroche, découverte du bien, signature sonore JML et écran final.</div>
       </div>
       <span class="story-badge">🔒 Photos originales uniquement</span>
     </div>
@@ -256,7 +256,7 @@ let storyAudioDbPromise = null;
 
 
 /* Signature sonore JML — générée localement, sans fichier externe ni musique sous licence */
-async function createJmlSignatureBuffer(audioContext, duration = 13) {
+async function createJmlSignatureBuffer(audioContext, duration = 60) {
   const Offline = window.OfflineAudioContext || window.webkitOfflineAudioContext;
   if (!Offline) throw new Error("Le navigateur ne permet pas de générer la signature sonore JML.");
   const ctx = new Offline(2, Math.ceil(audioContext.sampleRate * duration), audioContext.sampleRate);
@@ -1625,7 +1625,7 @@ async function createStoryVideo() {
     const ctx = canvas.getContext("2d", { alpha: false });
     const W = 1080, H = 1920, fps = 30;
     const speed = Math.max(0.5, Math.min(2, Number($("storySpeed")?.value || 1)));
-    const duration = 13 / speed;
+    const duration = Math.min(60, 60 / speed);
     const mimeType = storyMimeType();
     if (!mimeType) throw new Error("Aucun format vidéo compatible n'est disponible sur ce navigateur.");
 
