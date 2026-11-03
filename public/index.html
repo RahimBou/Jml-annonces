@@ -1867,7 +1867,13 @@ async function shareStoryVideo() {
       headers: { "Content-Type": currentStoryBlob.type || "video/webm" },
       body: currentStoryBlob
     });
-    const data = await response.json().catch(() => ({}));
+    const responseText = await response.text();
+    let data = {};
+    try { data = responseText ? JSON.parse(responseText) : {}; }
+    catch {
+      const excerpt = responseText.replace(/\\s+/g, " ").slice(0, 240);
+      throw new Error("Réponse serveur illisible (HTTP " + response.status + "). " + (excerpt || "Le serveur a interrompu la requête ou renvoyé une page non JSON."));
+    }
     if (data.results) {
       const facebook = data.results.facebook;
       const instagram = data.results.instagram;
@@ -1882,7 +1888,10 @@ async function shareStoryVideo() {
         : "⚠️ Publication incomplète. " + facebookText + " " + instagramText + " Le téléchargement reste disponible ci-dessous.";
       return;
     }
-    throw new Error(data.error || "Le serveur n'a pas pu publier la Story.");
+    throw new Error(
+      (data.error || "Le serveur n'a pas pu publier la Story.") +
+      " (HTTP " + response.status + (data.requestId ? " · Réf. " + data.requestId : "") + ")"
+    );
   } catch (error) {
     status.textContent = "🔴 Publication automatique impossible : " +
       (error.message || "erreur inconnue.") +
