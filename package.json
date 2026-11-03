@@ -13,6 +13,7 @@
   "dependencies": {
     "cheerio": "^1.1.2",
     "express": "^5.1.0",
-    "ffmpeg-static": "^5.2.0"
+    "ffmpeg-static": "^5.2.0",
+    "ffprobe-static": "^3.1.0"
   }
 }
