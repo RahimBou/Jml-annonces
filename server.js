@@ -2,6 +2,10 @@ const express = require("express");
 const path = require("path");
 const crypto = require("crypto");
 const cheerio = require("cheerio");
+const { spawn } = require("child_process");
+const fs = require("fs");
+const os = require("os");
+const ffmpegPath = require("ffmpeg-static");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -16,14 +20,16 @@ app.get("/data-deletion", (req, res) => res.sendFile(path.join(__dirname, "publi
 
 
 /* -------------------------------------------------------------------------- */
-/* Social accounts — OAuth connection only                                   */
-/* Publication remains a deliberate human action in the UI.                  */
+/* Social accounts — OAuth connection and user-validated publishing        */
+/* Posts and Stories are only published after an explicit UI action.          */
 /* Tokens are encrypted in an HttpOnly cookie so no password is ever stored. */
 /* -------------------------------------------------------------------------- */
 
 const SOCIAL_COOKIE = "jml_social";
 const SOCIAL_STATE_COOKIE = "jml_social_state";
 const SOCIAL_SECRET = process.env.SOCIAL_COOKIE_SECRET || process.env.JWT_SECRET || "";
+const STORY_MEDIA_TTL_MS = 10 * 60 * 1000;
+const storyMedia = new Map();
 
 const META_DEFAULT_APP_ID = "1747047203221133";
 const META_DEFAULT_SCOPES = [
@@ -297,6 +303,273 @@ app.get("/api/social/callback/:provider", async (req, res) => {
     return res.status(502).send("Connexion " + provider + " impossible : " + error.message);
   }
 });
+
+
+
+/* -------------------------------------------------------------------------- */
+/* Automatic video Stories — Facebook Page + Instagram Business              */
+/* -------------------------------------------------------------------------- */
+function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function metaJson(response, fallback) {
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || payload?.error) {
+    throw new Error(payload?.error?.message || fallback || "Meta a refusé la requête.");
+  }
+  return payload;
+}
+
+async function convertStoryToMp4(inputBuffer) {
+  if (!ffmpegPath) throw new Error("FFmpeg n'est pas disponible sur ce serveur. Vérifie l'installation de ffmpeg-static sur Render.");
+  const tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "jml-story-"));
+  const inputPath = path.join(tempDir, "story-input.webm");
+  const outputPath = path.join(tempDir, "story-output.mp4");
+  try {
+    await fs.promises.writeFile(inputPath, inputBuffer);
+    await new Promise((resolve, reject) => {
+      const args = [
+        "-hide_banner", "-loglevel", "error", "-y", "-i", inputPath,
+        "-map", "0:v:0", "-map", "0:a?",
+        "-vf", "scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2,setsar=1",
+        "-r", "30", "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+        "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "128k", "-ar", "48000",
+        "-ac", "2", "-movflags", "+faststart", outputPath
+      ];
+      const child = spawn(ffmpegPath, args, { stdio: ["ignore", "ignore", "pipe"] });
+      let stderr = "";
+      const timeout = setTimeout(() => {
+        child.kill("SIGKILL");
+        reject(new Error("La conversion vidéo a dépassé le délai autorisé."));
+      }, 120000);
+      timeout.unref?.();
+      child.stderr.on("data", chunk => { stderr = (stderr + chunk.toString()).slice(-5000); });
+      child.on("error", error => { clearTimeout(timeout); reject(error); });
+      child.on("close", code => {
+        clearTimeout(timeout);
+        if (code === 0) resolve();
+        else reject(new Error("Conversion MP4 impossible : " + (stderr.trim() || "erreur FFmpeg.")));
+      });
+    });
+    const stat = await fs.promises.stat(outputPath);
+    if (!stat.size) throw new Error("FFmpeg a produit une vidéo MP4 vide.");
+    if (stat.size > 50 * 1024 * 1024) throw new Error("La vidéo convertie dépasse la limite de 50 Mo.");
+    return await fs.promises.readFile(outputPath);
+  } finally {
+    await fs.promises.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
+app.get("/api/social/story-media/:token", (req, res) => {
+  const token = String(req.params.token || "");
+  const item = storyMedia.get(token);
+  if (!item || item.expiresAt <= Date.now()) {
+    storyMedia.delete(token);
+    return res.status(404).send("Média Story expiré ou indisponible.");
+  }
+  res.set({
+    "Content-Type": "video/mp4",
+    "Content-Length": String(item.buffer.length),
+    "Cache-Control": "no-store, no-cache, must-revalidate",
+    "X-Content-Type-Options": "nosniff"
+  });
+  return res.end(item.buffer);
+});
+
+async function publishFacebookVideoStory(account, videoBuffer, graphBase) {
+  if (!account?.accessToken || !account?.pageId) throw new Error("Page Facebook JML non connectée.");
+  const pageResponse = await fetch(
+    graphBase + "/" + encodeURIComponent(account.pageId) +
+    "?fields=id,name&access_token=" + encodeURIComponent(account.accessToken)
+  );
+  const page = await metaJson(pageResponse, "Jeton de la Page Facebook invalide.");
+  if (String(page.id || "") !== String(account.pageId)) throw new Error("Le jeton ne correspond pas à la Page Facebook enregistrée.");
+
+  const startResponse = await fetch(
+    graphBase + "/" + encodeURIComponent(account.pageId) +
+    "/video_stories?upload_phase=start&access_token=" + encodeURIComponent(account.accessToken),
+    { method: "POST" }
+  );
+  const start = await metaJson(startResponse, "Meta n'a pas pu initialiser la Story Facebook.");
+  if (!start.video_id || !start.upload_url) throw new Error("Meta n'a pas retourné les informations de transfert vidéo Facebook.");
+  const uploadUrl = new URL(start.upload_url);
+  if (uploadUrl.protocol !== "https:" || uploadUrl.hostname !== "rupload.facebook.com") {
+    throw new Error("Meta a retourné une adresse de transfert vidéo inattendue.");
+  }
+
+  const uploadResponse = await fetch(start.upload_url, {
+    method: "POST",
+    headers: {
+      "Authorization": "OAuth " + account.accessToken,
+      "offset": "0",
+      "file_size": String(videoBuffer.length),
+      "Content-Type": "application/octet-stream"
+    },
+    body: videoBuffer
+  });
+  const upload = await metaJson(uploadResponse, "Le transfert vidéo Facebook a échoué.");
+  if (upload.success === false) throw new Error("Meta n'a pas confirmé le transfert vidéo Facebook.");
+
+  const finishResponse = await fetch(
+    graphBase + "/" + encodeURIComponent(account.pageId) + "/video_stories",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        video_id: String(start.video_id),
+        upload_phase: "finish",
+        access_token: account.accessToken
+      })
+    }
+  );
+  const finish = await metaJson(finishResponse, "Meta n'a pas pu publier la Story Facebook.");
+  if (finish.success === false) throw new Error("Meta n'a pas confirmé la publication de la Story Facebook.");
+  return {
+    ok: true,
+    pageId: account.pageId,
+    videoId: String(start.video_id),
+    message: "Story envoyée à la Page Facebook JML Immobilier."
+  };
+}
+
+async function publishInstagramVideoStory(account, videoBuffer, graphBase, req) {
+  if (!account?.accessToken || !account?.instagramBusinessAccountId) {
+    throw new Error("Compte Instagram professionnel non connecté à la Page Facebook JML.");
+  }
+  const token = crypto.randomBytes(24).toString("hex");
+  storyMedia.set(token, { buffer: videoBuffer, expiresAt: Date.now() + STORY_MEDIA_TTL_MS });
+  try {
+    const mediaUrl = appBaseUrl(req) + "/api/social/story-media/" + token;
+    const profileResponse = await fetch(
+      graphBase + "/" + encodeURIComponent(account.instagramBusinessAccountId) +
+      "?fields=id,username,account_type&access_token=" + encodeURIComponent(account.accessToken)
+    );
+    const profile = await metaJson(profileResponse, "Impossible de vérifier le compte Instagram professionnel.");
+    if (profile.account_type && profile.account_type !== "BUSINESS") {
+      throw new Error("La publication de Stories par cette API nécessite un compte Instagram de type Business. Type détecté : " + profile.account_type + ".");
+    }
+
+    const createResponse = await fetch(
+      graphBase + "/" + encodeURIComponent(account.instagramBusinessAccountId) + "/media",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          media_type: "STORIES",
+          video_url: mediaUrl,
+          access_token: account.accessToken
+        })
+      }
+    );
+    const container = await metaJson(createResponse, "Meta n'a pas pu préparer la Story Instagram.");
+    if (!container.id) throw new Error("Meta n'a pas retourné d'identifiant de conteneur Instagram.");
+
+    let status = null;
+    for (let attempt = 0; attempt < 60; attempt++) {
+      await delay(5000);
+      const statusResponse = await fetch(
+        graphBase + "/" + encodeURIComponent(container.id) +
+        "?fields=status_code,status&access_token=" + encodeURIComponent(account.accessToken)
+      );
+      status = await metaJson(statusResponse, "Impossible de vérifier le traitement de la Story Instagram.");
+      if (status.status_code === "FINISHED") break;
+      if (status.status_code === "ERROR" || status.status_code === "EXPIRED") {
+        throw new Error(status.status || ("Traitement Instagram terminé avec le statut " + status.status_code + "."));
+      }
+    }
+    if (status?.status_code !== "FINISHED") {
+      throw new Error("Meta n'a pas terminé le traitement de la Story Instagram dans le délai de 5 minutes.");
+    }
+
+    const publishResponse = await fetch(
+      graphBase + "/" + encodeURIComponent(account.instagramBusinessAccountId) + "/media_publish",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          creation_id: String(container.id),
+          access_token: account.accessToken
+        })
+      }
+    );
+    const published = await metaJson(publishResponse, "Meta n'a pas pu publier la Story Instagram.");
+    if (!published.id) throw new Error("Meta n'a pas confirmé la publication de la Story Instagram.");
+    return {
+      ok: true,
+      instagramBusinessAccountId: account.instagramBusinessAccountId,
+      mediaId: String(published.id),
+      username: profile.username || null,
+      message: "Story envoyée au compte Instagram professionnel."
+    };
+  } finally {
+    storyMedia.delete(token);
+  }
+}
+
+app.post(
+  "/api/social/publish/story",
+  express.raw({ type: ["video/webm", "video/mp4", "application/octet-stream"], limit: "40mb" }),
+  async (req, res) => {
+    const requestId = crypto.randomBytes(6).toString("hex");
+    try {
+      if (!Buffer.isBuffer(req.body) || req.body.length < 1000) {
+        return res.status(400).json({ ok: false, requestId, error: "Fichier vidéo Story manquant ou vide." });
+      }
+      if (req.body.length > 40 * 1024 * 1024) {
+        return res.status(413).json({ ok: false, requestId, error: "La Story dépasse la limite de 40 Mo." });
+      }
+      const contentType = String(req.headers["content-type"] || "").split(";")[0].toLowerCase();
+      if (!["video/webm", "video/mp4", "application/octet-stream"].includes(contentType)) {
+        return res.status(415).json({ ok: false, requestId, error: "Format vidéo non pris en charge." });
+      }
+
+      const stored = readSocialAccounts(req);
+      const facebookAccount = stored.facebook;
+      const instagramAccount = stored.instagram;
+      if (!facebookAccount?.accessToken && !instagramAccount?.accessToken) {
+        return res.status(401).json({
+          ok: false,
+          requestId,
+          error: "Connecte d'abord la Page Facebook JML Immobilier et le compte Instagram professionnel dans Mes comptes sociaux."
+        });
+      }
+
+      const graphBase = "https://graph.facebook.com/" + (process.env.META_GRAPH_VERSION || "v23.0");
+      const videoBuffer = contentType === "video/mp4" ? req.body : await convertStoryToMp4(req.body);
+      const results = {};
+
+      if (facebookAccount?.accessToken && facebookAccount?.pageId) {
+        try { results.facebook = await publishFacebookVideoStory(facebookAccount, videoBuffer, graphBase); }
+        catch (error) { results.facebook = { ok: false, error: error.message || "Échec de la publication Facebook." }; }
+      } else {
+        results.facebook = { ok: false, error: "Page Facebook JML non connectée." };
+      }
+
+      if (instagramAccount?.accessToken && instagramAccount?.instagramBusinessAccountId) {
+        try { results.instagram = await publishInstagramVideoStory(instagramAccount, videoBuffer, graphBase, req); }
+        catch (error) { results.instagram = { ok: false, error: error.message || "Échec de la publication Instagram." }; }
+      } else {
+        results.instagram = { ok: false, error: "Compte Instagram professionnel non connecté à la Page Facebook JML." };
+      }
+
+      const ok = results.facebook.ok === true && results.instagram.ok === true;
+      return res.status(ok ? 200 : 207).json({
+        ok,
+        requestId,
+        results,
+        message: ok ? "Story publiée sur Facebook et Instagram." : "Publication partielle : consulte le résultat de chaque réseau."
+      });
+    } catch (error) {
+      return res.status(500).json({
+        ok: false,
+        requestId,
+        error: error.message || "Erreur pendant la publication automatique de la Story."
+      });
+    }
+  }
+);
+
 
 app.post("/api/social/publish/facebook", async (req, res) => {
   const requestId = crypto.randomBytes(6).toString("hex");
