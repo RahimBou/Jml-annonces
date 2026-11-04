@@ -673,7 +673,7 @@ function redrawVisualPhotoEditor() {
       ? "Aucune photo sélectionnée"
       : "Photo " + (selectedVisualPhoto + 1) + " sélectionnée";
   }
-  if (canvas) canvas.style.touchAction = "pan-y";
+  if (canvas) canvas.style.touchAction = "none";
 }
 
 function setupVisualPhotoEditor() {
@@ -681,7 +681,7 @@ function setupVisualPhotoEditor() {
   if (!canvas || canvas.dataset.photoEditorReady === "1") return;
   canvas.dataset.photoEditorReady = "1";
   canvas.style.cursor = "grab";
-  canvas.style.touchAction = "pan-y";
+  canvas.style.touchAction = "none";
 
   const pointFromEvent = event => {
     const rect = canvas.getBoundingClientRect();
