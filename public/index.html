@@ -272,6 +272,8 @@
 const $ = (id) => document.getElementById(id);
 let currentData = null;
 let visualPhotoSlots = [];
+let visualLoadedPhotos = null;
+let visualPhotoCacheKey = "";
 let visualPhotoTransforms = {};
 let selectedVisualPhoto = null;
 let visualPointerDrag = null;
@@ -801,8 +803,15 @@ async function renderJmlTemplate() {
 
   const aiOrder = Array.isArray(p.aiPlan?.photoOrder) ? p.aiPlan.photoOrder : (p.images || []).map((_,i)=>i);
   const sourceUrls = aiOrder.map(i => p.images?.[i]).filter(Boolean).slice(0, 7);
-  const loaded = await Promise.all(sourceUrls.map(loadCanvasImage));
-  const photos = loaded.filter(Boolean);
+  const cacheKey = sourceUrls.join("|");
+  if (!visualLoadedPhotos || visualPhotoCacheKey !== cacheKey) {
+    const loaded = await Promise.all(sourceUrls.map(loadCanvasImage));
+    visualLoadedPhotos = loaded.filter(Boolean);
+    visualPhotoCacheKey = cacheKey;
+    visualPhotoTransforms = {};
+    selectedVisualPhoto = null;
+  }
+  const photos = visualLoadedPhotos;
   if (!photos.length) return;
   visualPhotoSlots = [];
   photos.forEach((img, index) => {
