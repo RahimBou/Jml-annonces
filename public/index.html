@@ -1433,18 +1433,18 @@ function drawStoryIntro(ctx, p, logo, heroImg, W, H, progress) {
 
   ctx.fillStyle = "#d0a64b";
   ctx.font = "bold 43px Georgia";
-  ctx.fillText("JML IMMOBILIER", 60, 292);
+  ctx.fillText("JML IMMOBILIER", 60, 322);
 
   ctx.fillStyle = "#fff";
   ctx.font = "bold 78px Georgia";
-  ctx.fillText("NOUVEAU", 60, 405);
-  ctx.fillText("À LA VENTE", 60, 492);
+  ctx.fillText("NOUVEAU", 60, 435);
+  ctx.fillText("À LA VENTE", 60, 522);
 
-  drawStoryPill(ctx, title, 60, 565, "#d0a64b", "#151515", "bold 30px Arial");
+  drawStoryPill(ctx, title, 60, 595, "#d0a64b", "#151515", "bold 30px Arial");
 
   ctx.fillStyle = "#fff";
   ctx.font = "bold 43px Arial";
-  wrapStoryText(ctx, location, 850, 2).forEach((line, i) => ctx.fillText(line, 60, 645 + i * 54));
+  wrapStoryText(ctx, location, 850, 2).forEach((line, i) => ctx.fillText(line, 60, 675 + i * 54));
 
   ctx.fillStyle = "rgba(1,37,23,.92)";
   ctx.beginPath();
@@ -1499,9 +1499,9 @@ function drawStoryPhotoFrame(ctx, p, img, index, count, progress, W, H, logo, cl
     ctx.fillRect(0, 0, W, H);
   }
 
-  // Safe zones Meta (1080 × 1920) : 250 px en haut et 420 px en bas.
+  // Safe zones Meta (1080 × 1920) : 300 px en haut et 420 px en bas.
   // Les informations essentielles restent dans la zone centrale visible.
-  const topH = 455;
+  const topH = 500;
   const bottomH = 660;
   // La photo occupe toute la largeur de la zone centrale : aucun cadre crème,
   // aucun espace blanc autour des photos pendant les changements.
@@ -1546,30 +1546,30 @@ function drawStoryPhotoFrame(ctx, p, img, index, count, progress, W, H, logo, cl
   ctx.fillStyle = "#c6a15b";
   ctx.font = "800 " + fitStoryText(ctx, headline, W - 110, 38, 22) + "px Arial";
   ctx.textAlign = "center";
-  ctx.fillText(headline, W / 2, 282);
+  ctx.fillText(headline, W / 2, 332);
 
   ctx.fillStyle = "#fff";
   ctx.font = "600 " + fitStoryText(ctx, sub, W - 120, 24, 16) + "px Arial";
-  ctx.fillText(sub, W / 2, 321);
+  ctx.fillText(sub, W / 2, 371);
 
   ctx.fillStyle = "rgba(198,161,91,.55)";
-  ctx.fillRect(60, 346, W - 120, 2);
+  ctx.fillRect(60, 396, W - 120, 2);
 
   ctx.fillStyle = "#fff";
   ctx.font = "700 20px Arial";
-  ctx.fillText(location, W / 2, 381);
+  ctx.fillText(location, W / 2, 431);
 
   ctx.fillStyle = "#c6a15b";
   ctx.font = "800 18px Arial";
-  ctx.fillText("JML IMMOBILIER", W / 2, 414);
+  ctx.fillText("JML IMMOBILIER", W / 2, 464);
 
   ctx.fillStyle = "rgba(198,161,91,.96)";
   ctx.beginPath();
-  ctx.roundRect(W - 178, 248, 133, 40, 20);
+  ctx.roundRect(W - 178, 298, 133, 40, 20);
   ctx.fill();
   ctx.fillStyle = "#17382f";
   ctx.font = "800 17px Arial";
-  ctx.fillText(String(index + 1).padStart(2, "0") + " / " + String(count).padStart(2, "0"), W - 111, 274);
+  ctx.fillText(String(index + 1).padStart(2, "0") + " / " + String(count).padStart(2, "0"), W - 111, 324);
 
   // Petit bandeau dans la zone photo, uniquement pour créer de l'impact.
   const label = storyImageLabel(index, img);
