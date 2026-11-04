@@ -254,12 +254,27 @@
     </div>
     <div class="canvas-wrap" style="background:#e9e5da;padding:14px;border-radius:16px;overflow:auto;text-align:center">
       <canvas id="visual" width="1200" height="1200" style="width:min(100%,900px);height:auto;display:block;margin:auto;box-shadow:0 8px 30px rgba(0,0,0,.16)"></canvas>
+      <div id="photoEditor" style="margin:14px auto 0;max-width:900px;padding:14px;background:#fff;border:1px solid #ddd8ca;border-radius:12px;text-align:left">
+        <div style="font-weight:800;color:#17382f;font-size:17px">✋ Ajuster les photos</div>
+        <div id="photoEditorHelp" style="font-size:13px;color:#6f746f;margin:6px 0 12px">Touchez une photo dans le visuel, puis faites glisser pour changer son cadrage. Utilisez les boutons pour zoomer.</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <strong id="photoEditorSelected" style="color:#17382f;margin-right:auto">Aucune photo sélectionnée</strong>
+          <button type="button" id="photoZoomOut" style="padding:10px 14px">− Zoom</button>
+          <button type="button" id="photoZoomIn" style="padding:10px 14px">+ Zoom</button>
+          <button type="button" id="photoReset" style="background:#6f746f;padding:10px 14px">Réinitialiser</button>
+        </div>
+        <div style="font-size:12px;color:#6f746f;margin-top:9px">Le déplacement agit sur la photo à l'intérieur de son cadre, pas sur la mise en page.</div>
+      </div>
     </div>
   </section>
 
 <script>
 const $ = (id) => document.getElementById(id);
 let currentData = null;
+let visualPhotoSlots = [];
+let visualPhotoTransforms = {};
+let selectedVisualPhoto = null;
+let visualPointerDrag = null;
 let currentStoryBlob = null;
 let currentStoryUrl = null;
 let selectedStoryAudioId = "";
@@ -624,6 +639,118 @@ function cropCanvasImage(ctx, img, x, y, w, h) {
   ctx.drawImage(img, sx, sy, sw, sh, x, y, w, h);
 }
 
+function drawEditablePhoto(ctx, img, slotId, x, y, w, h) {
+  if (!img) return;
+  const t = visualPhotoTransforms[slotId] || { zoom: 1, panX: 0, panY: 0 };
+  const coverScale = Math.max(w / img.naturalWidth, h / img.naturalHeight);
+  const scale = coverScale * Math.max(1, Math.min(3, t.zoom || 1));
+  const dw = img.naturalWidth * scale;
+  const dh = img.naturalHeight * scale;
+  const maxPanX = Math.max(0, (dw - w) / 2);
+  const maxPanY = Math.max(0, (dh - h) / 2);
+  const panX = Math.max(-maxPanX, Math.min(maxPanX, (t.panX || 0) * maxPanX));
+  const panY = Math.max(-maxPanY, Math.min(maxPanY, (t.panY || 0) * maxPanY));
+  const dx = x + (w - dw) / 2 + panX;
+  const dy = y + (h - dh) / 2 + panY;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(x, y, w, h);
+  ctx.clip();
+  ctx.drawImage(img, dx, dy, dw, dh);
+  ctx.restore();
+  visualPhotoSlots[slotId] = { id: slotId, x, y, w, h };
+}
+
+function redrawVisualPhotoEditor() {
+  if (!visualPhotoSlots.length || !$("visual")) return;
+  const canvas = $("visual");
+  const rect = canvas.getBoundingClientRect();
+  const label = $("photoEditorSelected");
+  if (label) {
+    label.textContent = selectedVisualPhoto === null
+      ? "Aucune photo sélectionnée"
+      : "Photo " + (selectedVisualPhoto + 1) + " sélectionnée";
+  }
+  if (canvas) canvas.style.touchAction = "pan-y";
+}
+
+function setupVisualPhotoEditor() {
+  const canvas = $("visual");
+  if (!canvas || canvas.dataset.photoEditorReady === "1") return;
+  canvas.dataset.photoEditorReady = "1";
+  canvas.style.cursor = "grab";
+  canvas.style.touchAction = "pan-y";
+
+  const pointFromEvent = event => {
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: (event.clientX - rect.left) * (canvas.width / rect.width),
+      y: (event.clientY - rect.top) * (canvas.height / rect.height)
+    };
+  };
+  const findSlot = point => visualPhotoSlots.find(slot =>
+    point.x >= slot.x && point.x <= slot.x + slot.w &&
+    point.y >= slot.y && point.y <= slot.y + slot.h
+  );
+
+  canvas.addEventListener("pointerdown", event => {
+    const point = pointFromEvent(event);
+    const slot = findSlot(point);
+    if (!slot) return;
+    selectedVisualPhoto = slot.id;
+    const t = visualPhotoTransforms[slot.id] || { zoom: 1, panX: 0, panY: 0 };
+    visualPhotoTransforms[slot.id] = t;
+    visualPointerDrag = { id: slot.id, startX: point.x, startY: point.y, panX: t.panX || 0, panY: t.panY || 0, slot };
+    canvas.setPointerCapture?.(event.pointerId);
+    canvas.style.cursor = "grabbing";
+    redrawVisualPhotoEditor();
+    event.preventDefault();
+  });
+
+  canvas.addEventListener("pointermove", event => {
+    if (!visualPointerDrag) return;
+    const point = pointFromEvent(event);
+    const d = visualPointerDrag;
+    const t = visualPhotoTransforms[d.id];
+    const maxPanX = Math.max(1, (d.slot.w * (t.zoom - 1)) / 2);
+    const maxPanY = Math.max(1, (d.slot.h * (t.zoom - 1)) / 2);
+    t.panX = Math.max(-1, Math.min(1, d.panX + (point.x - d.startX) / maxPanX));
+    t.panY = Math.max(-1, Math.min(1, d.panY + (point.y - d.startY) / maxPanY));
+    // At 1x, allow a small natural drag only after zooming in.
+    if (t.zoom <= 1.001) { t.panX = 0; t.panY = 0; }
+    renderVisualComposition();
+  });
+
+  const stopDrag = () => { visualPointerDrag = null; canvas.style.cursor = "grab"; };
+  canvas.addEventListener("pointerup", stopDrag);
+  canvas.addEventListener("pointercancel", stopDrag);
+
+  $("photoZoomIn")?.addEventListener("click", () => {
+    if (selectedVisualPhoto === null) return;
+    const t = visualPhotoTransforms[selectedVisualPhoto];
+    t.zoom = Math.min(3, Math.round((t.zoom + 0.2) * 100) / 100);
+    renderVisualComposition();
+  });
+  $("photoZoomOut")?.addEventListener("click", () => {
+    if (selectedVisualPhoto === null) return;
+    const t = visualPhotoTransforms[selectedVisualPhoto];
+    t.zoom = Math.max(1, Math.round((t.zoom - 0.2) * 100) / 100);
+    if (t.zoom === 1) { t.panX = 0; t.panY = 0; }
+    renderVisualComposition();
+  });
+  $("photoReset")?.addEventListener("click", () => {
+    if (selectedVisualPhoto === null) return;
+    visualPhotoTransforms[selectedVisualPhoto] = { zoom: 1, panX: 0, panY: 0 };
+    renderVisualComposition();
+  });
+}
+
+function renderVisualComposition() {
+  if (!visualPhotoSlots.length || !currentData?.listing) return;
+  // Re-render the complete composition from the saved photo transforms.
+  renderJmlTemplate();
+}
+
 function loadCanvasImage(src) {
   return new Promise(resolve => {
     const img = new Image();
@@ -677,6 +804,11 @@ async function renderJmlTemplate() {
   const loaded = await Promise.all(sourceUrls.map(loadCanvasImage));
   const photos = loaded.filter(Boolean);
   if (!photos.length) return;
+  visualPhotoSlots = [];
+  photos.forEach((img, index) => {
+    if (!visualPhotoTransforms[index]) visualPhotoTransforms[index] = { zoom: 1, panX: 0, panY: 0 };
+  });
+  if (selectedVisualPhoto !== null && !photos[selectedVisualPhoto]) selectedVisualPhoto = null;
 
   // Exact reference geometry: hero 468 px, gallery 422 px, stats 105 px,
   // green highlights 105 px, contact footer 100 px.
@@ -691,7 +823,7 @@ async function renderJmlTemplate() {
   const FOOTER_H = 102;
 
   // HERO
-  cropCanvasImage(ctx, photos[0], 0, 0, W, HERO_H);
+  drawEditablePhoto(ctx, photos[0], 0, 0, 0, W, HERO_H);
 
   // TOP RIGHT GREEN/GOLD folded badge.
   ctx.fillStyle = GREEN;
@@ -735,14 +867,14 @@ async function renderJmlTemplate() {
   // We use only verified original photos.
   const gap = 5;
   const galleryPhotos = photos.slice(1,7);
-  if (galleryPhotos[0]) cropCanvasImage(ctx,galleryPhotos[0],0,GALLERY_Y,595,230);
-  if (galleryPhotos[1]) cropCanvasImage(ctx,galleryPhotos[1],600,GALLERY_Y,600,230);
+  if (galleryPhotos[0]) drawEditablePhoto(ctx,galleryPhotos[0],1,0,GALLERY_Y,595,230);
+  if (galleryPhotos[1]) drawEditablePhoto(ctx,galleryPhotos[1],2,600,GALLERY_Y,600,230);
 
   const smallY = GALLERY_Y + 235;
   const smallW = (W - gap*3) / 4;
   for (let i=0;i<4;i++) {
     const img = galleryPhotos[i+2];
-    if (img) cropCanvasImage(ctx,img,i*(smallW+gap),smallY,smallW,181);
+    if (img) drawEditablePhoto(ctx,img,i+3,i*(smallW+gap),smallY,smallW,181);
   }
 
   // STATS — five columns. Never display an empty "—" field:
@@ -902,6 +1034,8 @@ async function renderJmlTemplate() {
   }
 
   $("visualSection").style.display="block";
+  setupVisualPhotoEditor();
+  redrawVisualPhotoEditor();
   // The social-copy section must be visible before the share buttons are used.
   // It is enabled as soon as the visual is ready; the copy button itself still
   // requires the Gemini/data-controller plan before generating any text.
