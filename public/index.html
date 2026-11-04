@@ -1433,41 +1433,41 @@ function drawStoryIntro(ctx, p, logo, heroImg, W, H, progress) {
 
   ctx.fillStyle = "#d0a64b";
   ctx.font = "bold 43px Georgia";
-  ctx.fillText("JML IMMOBILIER", 60, 92);
+  ctx.fillText("JML IMMOBILIER", 60, 292);
 
   ctx.fillStyle = "#fff";
   ctx.font = "bold 78px Georgia";
-  ctx.fillText("NOUVEAU", 60, 205);
-  ctx.fillText("À LA VENTE", 60, 292);
+  ctx.fillText("NOUVEAU", 60, 405);
+  ctx.fillText("À LA VENTE", 60, 492);
 
-  drawStoryPill(ctx, title, 60, 365, "#d0a64b", "#151515", "bold 30px Arial");
+  drawStoryPill(ctx, title, 60, 565, "#d0a64b", "#151515", "bold 30px Arial");
 
   ctx.fillStyle = "#fff";
   ctx.font = "bold 43px Arial";
-  wrapStoryText(ctx, location, 850, 2).forEach((line, i) => ctx.fillText(line, 60, 445 + i * 54));
+  wrapStoryText(ctx, location, 850, 2).forEach((line, i) => ctx.fillText(line, 60, 645 + i * 54));
 
   ctx.fillStyle = "rgba(1,37,23,.92)";
   ctx.beginPath();
-  ctx.roundRect(45, H - 360, W - 90, 255, 34);
+  ctx.roundRect(45, H - 660, W - 90, 255, 34);
   ctx.fill();
 
   ctx.fillStyle = "#d0a64b";
   ctx.font = "bold 66px Georgia";
-  ctx.fillText(p.price || "Prix", 80, H - 255);
+  ctx.fillText(p.price || "Prix", 80, H - 555);
 
   const specs = [p.surface || "", p.rooms ? p.rooms + " pièces" : "", p.bedrooms ? p.bedrooms + " chambres" : ""]
     .filter(Boolean).join(" · ");
   ctx.fillStyle = "#fff";
   ctx.font = "bold 32px Arial";
-  if (specs) ctx.fillText(specs, 80, H - 190);
+  if (specs) ctx.fillText(specs, 80, H - 490);
 
   ctx.fillStyle = "#fff";
   ctx.font = "25px Arial";
-  ctx.fillText("Découvrez le bien", 80, H - 135);
+  ctx.fillText("Découvrez le bien", 80, H - 435);
 
   if (logo) {
     ctx.globalAlpha = .95;
-    ctx.drawImage(logo, W - 385, H - 225, 300, 96);
+    ctx.drawImage(logo, W - 385, H - 525, 300, 96);
     ctx.globalAlpha = 1;
   }
 
@@ -1499,8 +1499,10 @@ function drawStoryPhotoFrame(ctx, p, img, index, count, progress, W, H, logo, cl
     ctx.fillRect(0, 0, W, H);
   }
 
-  const topH = 205;
-  const bottomH = 260;
+  // Safe zones Meta (1080 × 1920) : 250 px en haut et 420 px en bas.
+  // Les informations essentielles restent dans la zone centrale visible.
+  const topH = 455;
+  const bottomH = 660;
   // La photo occupe toute la largeur de la zone centrale : aucun cadre crème,
   // aucun espace blanc autour des photos pendant les changements.
   const regionY = topH;
@@ -1544,30 +1546,30 @@ function drawStoryPhotoFrame(ctx, p, img, index, count, progress, W, H, logo, cl
   ctx.fillStyle = "#c6a15b";
   ctx.font = "800 " + fitStoryText(ctx, headline, W - 110, 38, 22) + "px Arial";
   ctx.textAlign = "center";
-  ctx.fillText(headline, W / 2, 52);
+  ctx.fillText(headline, W / 2, 282);
 
   ctx.fillStyle = "#fff";
   ctx.font = "600 " + fitStoryText(ctx, sub, W - 120, 24, 16) + "px Arial";
-  ctx.fillText(sub, W / 2, 91);
+  ctx.fillText(sub, W / 2, 321);
 
   ctx.fillStyle = "rgba(198,161,91,.55)";
-  ctx.fillRect(60, 116, W - 120, 2);
+  ctx.fillRect(60, 346, W - 120, 2);
 
   ctx.fillStyle = "#fff";
   ctx.font = "700 20px Arial";
-  ctx.fillText(location, W / 2, 151);
+  ctx.fillText(location, W / 2, 381);
 
   ctx.fillStyle = "#c6a15b";
   ctx.font = "800 18px Arial";
-  ctx.fillText("JML IMMOBILIER", W / 2, 184);
+  ctx.fillText("JML IMMOBILIER", W / 2, 414);
 
   ctx.fillStyle = "rgba(198,161,91,.96)";
   ctx.beginPath();
-  ctx.roundRect(W - 178, 18, 133, 40, 20);
+  ctx.roundRect(W - 178, 248, 133, 40, 20);
   ctx.fill();
   ctx.fillStyle = "#17382f";
   ctx.font = "800 17px Arial";
-  ctx.fillText(String(index + 1).padStart(2, "0") + " / " + String(count).padStart(2, "0"), W - 111, 44);
+  ctx.fillText(String(index + 1).padStart(2, "0") + " / " + String(count).padStart(2, "0"), W - 111, 274);
 
   // Petit bandeau dans la zone photo, uniquement pour créer de l'impact.
   const label = storyImageLabel(index, img);
