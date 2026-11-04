@@ -714,12 +714,13 @@ function setupVisualPhotoEditor() {
     const point = pointFromEvent(event);
     const d = visualPointerDrag;
     const t = visualPhotoTransforms[d.id];
-    const maxPanX = Math.max(1, (d.slot.w * (t.zoom - 1)) / 2);
-    const maxPanY = Math.max(1, (d.slot.h * (t.zoom - 1)) / 2);
+    const img = visualLoadedPhotos?.[d.id];
+    if (!img) return;
+    const coverScale = Math.max(d.slot.w / img.naturalWidth, d.slot.h / img.naturalHeight) * t.zoom;
+    const maxPanX = Math.max(1, (img.naturalWidth * coverScale - d.slot.w) / 2);
+    const maxPanY = Math.max(1, (img.naturalHeight * coverScale - d.slot.h) / 2);
     t.panX = Math.max(-1, Math.min(1, d.panX + (point.x - d.startX) / maxPanX));
     t.panY = Math.max(-1, Math.min(1, d.panY + (point.y - d.startY) / maxPanY));
-    // At 1x, allow a small natural drag only after zooming in.
-    if (t.zoom <= 1.001) { t.panX = 0; t.panY = 0; }
     renderVisualComposition();
   });
 
