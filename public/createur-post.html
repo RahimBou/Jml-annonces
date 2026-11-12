@@ -135,22 +135,6 @@ function drawCover(ctx,img,w,h){
   ctx.drawImage(img,(w-nw)/2,(h-nh)/2,nw,nh);
 }
 
-function drawContain(ctx,img,w,h){
-  drawContainRegion(ctx,img,w,0,0,w,h);
-}
-
-function drawContainRegion(ctx,img,w,x0,y0,x1,y1){
-  const regionW=x1-x0,regionH=y1-y0;
-  const s=Math.min((regionW-28)/img.width,(regionH-28)/img.height);
-  const nw=img.width*s,nh=img.height*s;
-  const x=x0+(regionW-nw)/2,y=y0+(regionH-nh)/2;
-  ctx.drawImage(img,x,y,nw,nh);
-  ctx.save();
-  ctx.strokeStyle='#c6a15b';ctx.lineWidth=3;
-  ctx.strokeRect(x-2,y-2,nw+4,nh+4);
-  ctx.restore();
-}
-
 function fitText(ctx,text,maxWidth,maxSize,minSize=20,font='Arial'){
   let size=maxSize;
   while(size>minSize){
@@ -163,29 +147,10 @@ function fitText(ctx,text,maxWidth,maxSize,minSize=20,font='Arial'){
 
 function drawSlide(ctx,slide,t){
   const {img}=slide,w=ctx.canvas.width,h=ctx.canvas.height;
-  const topH=150,bottomH=190;
   ctx.clearRect(0,0,w,h);
 
-  // Fond discret : l'image reste uniquement dans la zone centrale.
-  ctx.fillStyle='#f6f2e9';ctx.fillRect(0,0,w,h);
-  ctx.save();
-  ctx.globalAlpha=.18;
+  // Visuel plein écran : la photo occupe toute la Story, sans bandeau horizontal.
   drawCover(ctx,img,w,h);
-  ctx.fillStyle='#17382f';ctx.fillRect(0,0,w,h);
-  ctx.restore();
-
-  const scale=1+0.008*t;
-  const regionW=w-44,regionY=topH+10,regionH=h-topH-bottomH-20;
-  const s=Math.min((regionW-28)/img.width,(regionH-28)/img.height)*scale;
-  const nw=img.width*s,nh=img.height*s;
-  const x=(w-nw)/2,y=regionY+(regionH-nh)/2;
-  ctx.save();
-  ctx.shadowColor='rgba(0,0,0,.22)';ctx.shadowBlur=22;ctx.shadowOffsetY=8;
-  ctx.drawImage(img,x,y,nw,nh);
-  ctx.restore();
-  ctx.save();
-  ctx.strokeStyle='#c6a15b';ctx.lineWidth=3;ctx.strokeRect(x-2,y-2,nw+4,nh+4);
-  ctx.restore();
 
   const headline=String($('headline')?.value||'').trim();
   const sub=String($('subheadline')?.value||'').trim();
@@ -195,59 +160,91 @@ function drawSlide(ctx,slide,t){
   const cta=String($('contactCta')?.value||'').trim();
   const area=String($('contactArea')?.value||'').trim();
 
-  // Bandeau haut : impactant mais court.
-  ctx.fillStyle='rgba(23,56,47,.97)';
-  ctx.fillRect(0,0,w,topH);
+  // Dégradé léger en haut : lisibilité du texte sans masquer la photographie.
+  const topGradient=ctx.createLinearGradient(0,0,0,430);
+  topGradient.addColorStop(0,'rgba(0,0,0,.58)');
+  topGradient.addColorStop(.62,'rgba(0,0,0,.18)');
+  topGradient.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle=topGradient;
+  ctx.fillRect(0,0,w,430);
+
+  // Identité et accroche directement posées sur la photo.
+  ctx.save();
+  ctx.textAlign='left';
+  ctx.shadowColor='rgba(0,0,0,.55)';
+  ctx.shadowBlur=8;
+  ctx.shadowOffsetY=2;
+
+  ctx.fillStyle='#c6a15b';
+  ctx.font='800 21px Georgia';
+  ctx.fillText('JML IMMOBILIER',42,76);
+
   if(headline){
-    ctx.fillStyle='#c6a15b';
-    const fs=fitText(ctx,headline,w-70,35,22);
-    ctx.font='800 '+fs+'px Arial';
-    ctx.textAlign='center';
-    ctx.fillText(headline,w/2,53);
+    ctx.fillStyle='#fff';
+    const fs=fitText(ctx,headline,w-84,43,27);
+    ctx.font='800 '+fs+'px Georgia';
+    const words=headline.split(/\s+/);
+    let line='', y=130, lineHeight=fs+8;
+    for(const word of words){
+      const test=line?line+' '+word:word;
+      if(ctx.measureText(test).width>w-84 && line){
+        ctx.fillText(line,42,y);
+        y+=lineHeight;
+        line=word;
+      }else line=test;
+    }
+    if(line) ctx.fillText(line,42,y);
   }
+
   if(sub){
     ctx.fillStyle='#fff';
-    const fs=fitText(ctx,sub,w-70,22,16);
-    ctx.font='600 '+fs+'px Arial';
-    ctx.fillText(sub,w/2,91);
+    ctx.font='600 22px Arial';
+    ctx.fillText(sub,42,Math.min(285,h-260),w-84);
   }
-  ctx.fillStyle='rgba(198,161,91,.35)';
-  ctx.fillRect(60,112,w-120,2);
-  ctx.fillStyle='#fff';
-  ctx.font='700 15px Arial';
-  ctx.fillText(area||'JML Immobilier',w/2,137);
-  ctx.textAlign='left';
+  if(area){
+    ctx.font='700 18px Arial';
+    ctx.fillStyle='#f4ead5';
+    ctx.fillText(area,42,Math.min(325,h-225),w-84);
+  }
+  ctx.restore();
 
-  // Bandeau bas : identité + fonction + téléphone + CTA.
-  ctx.fillStyle='rgba(23,56,47,.98)';
-  ctx.fillRect(0,h-bottomH,w,bottomH);
+  // Carte de contact compacte et arrondie, superposée en bas de la photo.
+  // Elle remplace le grand bandeau vert pleine largeur.
+  const cardX=30,cardW=w-60,cardH=158,cardY=h-cardH-58,r=24;
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(cardX+r,cardY);
+  ctx.arcTo(cardX+cardW,cardY,cardX+cardW,cardY+cardH,r);
+  ctx.arcTo(cardX+cardW,cardY+cardH,cardX,cardY+cardH,r);
+  ctx.arcTo(cardX,cardY+cardH,cardX,cardY,r);
+  ctx.arcTo(cardX,cardY,cardX+cardW,cardY,r);
+  ctx.closePath();
+  ctx.fillStyle='rgba(23,56,47,.90)';
+  ctx.fill();
+
+  ctx.textAlign='left';
+  ctx.shadowColor='rgba(0,0,0,.18)';
+  ctx.shadowBlur=3;
   ctx.fillStyle='#c6a15b';
-  ctx.font='800 25px Georgia';
-  ctx.fillText(name||'JML Immobilier',32,h-bottomH+42);
+  ctx.font='800 23px Georgia';
+  ctx.fillText(name||'JML Immobilier',cardX+22,cardY+36);
+
   ctx.fillStyle='#fff';
-  ctx.font='600 17px Arial';
-  ctx.fillText(role||'Agent commercial en immobilier',32,h-bottomH+70);
+  ctx.font='600 16px Arial';
+  ctx.fillText(role||'Agent commercial en immobilier',cardX+22,cardY+63);
 
   if(phone){
-    ctx.fillStyle='#c6a15b';
-    ctx.font='800 24px Arial';
-    ctx.fillText('☎ '+phone,32,h-bottomH+108);
+    ctx.fillStyle='#f0c879';
+    ctx.font='800 19px Arial';
+    ctx.fillText('☎ '+phone,cardX+22,cardY+96);
   }
   if(cta){
     ctx.fillStyle='#fff';
-    ctx.font='800 19px Arial';
-    ctx.fillText(cta,32,h-bottomH+140);
+    ctx.font='700 17px Arial';
+    ctx.fillText(cta,cardX+22,cardY+129);
   }
-  ctx.fillStyle='#c6a15b';
-  ctx.font='700 15px Arial';
-  ctx.fillText('JML IMMOBILIER',w-190,h-bottomH+42);
-
-  // Petit repère visuel.
-  ctx.fillStyle='rgba(255,255,255,.8)';
-  ctx.font='14px Arial';
-  ctx.fillText('VOTRE PROJET, NOTRE ENGAGEMENT',w-300,h-bottomH+70);
+  ctx.restore();
 }
-
 async function readZip(file){
   if(!window.JSZip) throw new Error('Le moteur ZIP n\'est pas chargé. Recharge la page.');
   if(file.size>60*1024*1024) throw new Error('Le ZIP dépasse 60 Mo.');
@@ -277,7 +274,7 @@ function renderThumbs(){
     const im=document.createElement('img');im.src=s.img.src || ''; // fallback below
     // Canvas snapshot avoids relying on a revoked object URL.
     const c=document.createElement('canvas');c.width=180;c.height=320;
-    const cx=c.getContext('2d');cx.fillStyle='#17382f';cx.fillRect(0,0,c.width,c.height);drawContain(cx,s.img,c.width,c.height);
+    const cx=c.getContext('2d');drawCover(cx,s.img,c.width,c.height);
     im.src=c.toDataURL('image/jpeg',.86);
     const n=document.createElement('span');n.textContent=String(i+1);
     box.append(im,n);$('thumbs').appendChild(box);
