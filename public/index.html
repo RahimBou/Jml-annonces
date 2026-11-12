@@ -1604,6 +1604,7 @@ function fitStoryText(ctx, text, maxWidth, maxSize, minSize = 18) {
     if (ctx.measureText(text).width <= maxWidth) return size;
     size -= 2;
   }
+  ctx.font = "800 " + minSize + "px Arial";
   return minSize;
 }
 
@@ -1668,6 +1669,10 @@ async function createStoryVideo() {
   shareButton.disabled = true;
   downloadButton.disabled = true;
   status.textContent = "⏳ Création de la Story JML…";
+  let activeStoryStream = null;
+  let activeStoryAudioContext = null;
+  let activeStoryAudioSource = null;
+  let activeStoryRecorder = null;
 
   try {
     const p = currentData.listing;
@@ -1688,6 +1693,7 @@ async function createStoryVideo() {
     currentStoryBlob = null;
 
     const stream = canvas.captureStream(fps);
+    activeStoryStream = stream;
     let audioContext = null;
     let audioSource = null;
     let audioGain = null;
@@ -1699,6 +1705,7 @@ async function createStoryVideo() {
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
       if (!AudioCtx) throw new Error("Ce navigateur ne permet pas d'intégrer une piste audio.");
       audioContext = new AudioCtx();
+      activeStoryAudioContext = audioContext;
       await audioContext.resume();
 
       let audioBuffer;
@@ -1713,6 +1720,7 @@ async function createStoryVideo() {
       audioStartOffset = Math.min(storyAudioStartSeconds, Math.max(0, audioBuffer.duration - 0.05));
       audioPlaybackDuration = Math.max(0.05, Math.min(duration, audioBuffer.duration - audioStartOffset));
       audioSource = audioContext.createBufferSource();
+      activeStoryAudioSource = audioSource;
       audioSource.buffer = audioBuffer;
       audioSource.loop = false;
       audioGain = audioContext.createGain();
@@ -1728,6 +1736,7 @@ async function createStoryVideo() {
       videoBitsPerSecond: 6000000,
       audioBitsPerSecond: selectedStoryAudioId ? 128000 : undefined
     });
+    activeStoryRecorder = recorder;
     const chunks = [];
     recorder.ondataavailable = e => { if (e.data?.size) chunks.push(e.data); };
     const recordingDone = new Promise((resolve, reject) => {
@@ -1844,7 +1853,12 @@ async function createStoryVideo() {
     const blob = await recordingDone;
     if (audioContext) {
       try { await audioContext.close(); } catch {}
+      activeStoryAudioContext = null;
     }
+    activeStoryStream?.getTracks().forEach(track => track.stop());
+    activeStoryStream = null;
+    activeStoryAudioSource = null;
+    activeStoryRecorder = null;
     if (!blob || blob.size < 1000) throw new Error("La vidéo générée est vide.");
 
     currentStoryBlob = blob;
@@ -1863,6 +1877,16 @@ async function createStoryVideo() {
   } catch (error) {
     status.textContent = "🔴 " + (error.message || "Impossible de créer la Story.");
   } finally {
+    if (activeStoryRecorder && activeStoryRecorder.state !== "inactive") {
+      try { activeStoryRecorder.stop(); } catch {}
+    }
+    if (activeStoryAudioSource) {
+      try { activeStoryAudioSource.stop(); } catch {}
+    }
+    activeStoryStream?.getTracks().forEach(track => track.stop());
+    if (activeStoryAudioContext) {
+      try { await activeStoryAudioContext.close(); } catch {}
+    }
     button.disabled = false;
   }
 }
