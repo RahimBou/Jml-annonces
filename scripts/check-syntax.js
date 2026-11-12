@@ -15,7 +15,7 @@ for (const file of files) {
     continue;
   }
 
-  const blocks = [...source.matchAll(/<script\\b[^>]*>([\\s\\S]*?)<\\/script>/gi)];
+  const blocks = [...source.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)];
   if (!blocks.length) throw new Error("Aucun script inline trouvé dans " + file);
   blocks.forEach((match, index) => {
     const code = match[1].trim();
@@ -25,4 +25,4 @@ for (const file of files) {
   });
 }
 
-process.stdout.write("Syntaxe JavaScript valide : " + checkedScripts + " bloc(s) vérifié(s).\\n");
+process.stdout.write("Syntaxe JavaScript valide : " + checkedScripts + " bloc(s) vérifié(s).\n");
