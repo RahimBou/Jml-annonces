@@ -1562,262 +1562,86 @@ function drawStoryPill(ctx, text, x, y, bg, fg, font = "bold 30px Arial") {
 function drawStoryIntro(ctx, p, logo, heroImg, W, H, progress) {
   const title = propertyType(p.title);
   const location = String(p.location || "").replace(/\s*\(\d{5}\)/, "").trim() || "Ardennes";
-  const fade = Math.min(1, progress / .18);
-
-  ctx.fillStyle = "#012517";
-  ctx.fillRect(0, 0, W, H);
+  const price = p.price || "Prix sur demande";
+  const fade = Math.max(0, Math.min(1, progress / 0.2));
+  ctx.clearRect(0, 0, W, H);
   if (heroImg) {
-    const scale = Math.max(W / heroImg.naturalWidth, H / heroImg.naturalHeight) * 1.02;
+    const scale = Math.max(W / heroImg.naturalWidth, H / heroImg.naturalHeight) * 1.015;
     const dw = heroImg.naturalWidth * scale, dh = heroImg.naturalHeight * scale;
     ctx.drawImage(heroImg, (W-dw)/2, (H-dh)/2, dw, dh);
-  }
-  ctx.fillStyle = "rgba(1,37,23,.28)";
-  ctx.fillRect(0,0,W,H);
-  storyGradient(ctx, W, H);
-
-  ctx.fillStyle = "#d0a64b";
-  ctx.font = "bold 43px Georgia";
-  ctx.fillText("JML IMMOBILIER", 60, 322);
-
-  ctx.fillStyle = "#fff";
-  ctx.font = "bold 78px Georgia";
-  ctx.fillText("NOUVEAU", 60, 435);
-  ctx.fillText("À LA VENTE", 60, 522);
-
-  drawStoryPill(ctx, title, 60, 595, "#d0a64b", "#151515", "bold 30px Arial");
-
-  ctx.fillStyle = "#fff";
-  ctx.font = "bold 43px Arial";
-  wrapStoryText(ctx, location, 850, 2).forEach((line, i) => ctx.fillText(line, 60, 675 + i * 54));
-
-  ctx.fillStyle = "rgba(1,37,23,.92)";
-  ctx.beginPath();
-  ctx.roundRect(45, H - 660, W - 90, 255, 34);
-  ctx.fill();
-
-  ctx.fillStyle = "#d0a64b";
-  ctx.font = "bold 66px Georgia";
-  ctx.fillText(p.price || "Prix", 80, H - 555);
-
-  const specs = [p.surface || "", p.rooms ? p.rooms + " pièces" : "", p.bedrooms ? p.bedrooms + " chambres" : ""]
-    .filter(Boolean).join(" · ");
-  ctx.fillStyle = "#fff";
-  ctx.font = "bold 32px Arial";
-  if (specs) ctx.fillText(specs, 80, H - 490);
-
-  ctx.fillStyle = "#fff";
-  ctx.font = "25px Arial";
-  ctx.fillText("Découvrez le bien", 80, H - 435);
-
-  if (logo) {
-    ctx.globalAlpha = .95;
-    ctx.drawImage(logo, W - 385, H - 525, 300, 96);
-    ctx.globalAlpha = 1;
-  }
-
-  ctx.fillStyle = "rgba(255,255,255," + (1 - fade) + ")";
-  ctx.fillRect(0, 0, W, H);
-}
-
-function fitStoryText(ctx, text, maxWidth, maxSize, minSize = 18) {
-  let size = maxSize;
-  while (size > minSize) {
-    ctx.font = "800 " + size + "px Arial";
-    if (ctx.measureText(text).width <= maxWidth) return size;
-    size -= 2;
-  }
-  return minSize;
-}
-
-function storyImageLabel(index, img) {
-  const ratio = img.naturalWidth / Math.max(1, img.naturalHeight);
-  if (index === 0) return "À DÉCOUVRIR";
-  if (ratio >= 1.35) return "UN ESPACE À DÉCOUVRIR";
-  if (ratio <= 0.80) return "UN INTÉRIEUR À DÉCOUVRIR";
-  return "UN BIEN QUI MÉRITE LE DÉTOUR";
-}
-
-function drawStoryPhotoFrame(ctx, p, img, index, count, progress, W, H, logo, clear = true) {
-  if (clear) {
-    ctx.fillStyle = "#f6f2e9";
-    ctx.fillRect(0, 0, W, H);
-  }
-
-  // Safe zones Meta (1080 × 1920) : 300 px en haut et 420 px en bas.
-  // Les informations essentielles restent dans la zone centrale visible.
-  const topH = 500;
-  const bottomH = 660;
-  // La photo occupe toute la largeur de la zone centrale : aucun cadre crème,
-  // aucun espace blanc autour des photos pendant les changements.
-  const regionY = topH;
-  const regionH = H - topH - bottomH;
-
-  // Mode "cover" + effet Ken Burns très léger : la photo remplit toute la
-  // zone puis effectue un zoom lent et fluide. L'amplitude reste volontairement
-  // discrète pour donner du mouvement sans déformer ni "secouer" le bien.
-  const coverScale = Math.max(W / img.naturalWidth, regionH / img.naturalHeight);
-  const eased = progress * progress * (3 - 2 * progress); // smoothstep
-  const zoomDirection = index % 2 === 0 ? 1 : -1;
-  const zoom = 1 + zoomDirection * (0.028 * eased) + (zoomDirection < 0 ? 0.028 : 0);
-  const scale = coverScale * zoom;
-  const dw = img.naturalWidth * scale;
-  const dh = img.naturalHeight * scale;
-
-  // Micro-mouvement horizontal opposé au zoom pour un rendu plus naturel.
-  const pan = Math.sin(progress * Math.PI) * 7 * (index % 2 === 0 ? 1 : -1);
-  const px = (W - dw) / 2 + pan;
-  const py = regionY + (regionH - dh) / 2;
-
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(0, regionY, W, regionH);
-  ctx.clip();
-  ctx.drawImage(img, px, py, dw, dh);
+  } else { ctx.fillStyle = "#17382f"; ctx.fillRect(0,0,W,H); }
+  const top = ctx.createLinearGradient(0,0,0,780);
+  top.addColorStop(0,"rgba(0,0,0,.62)"); top.addColorStop(.55,"rgba(0,0,0,.18)"); top.addColorStop(1,"rgba(0,0,0,0)");
+  ctx.fillStyle=top; ctx.fillRect(0,0,W,780);
+  const bottom = ctx.createLinearGradient(0,1080,0,H);
+  bottom.addColorStop(0,"rgba(0,0,0,0)"); bottom.addColorStop(.55,"rgba(0,0,0,.55)"); bottom.addColorStop(1,"rgba(0,0,0,.72)");
+  ctx.fillStyle=bottom; ctx.fillRect(0,1080,W,H-1080);
+  ctx.save(); ctx.globalAlpha=1-fade; ctx.textAlign="left"; ctx.shadowColor="rgba(0,0,0,.65)"; ctx.shadowBlur=16;
+  ctx.fillStyle="#e3c27d"; ctx.font="700 34px Arial"; ctx.fillText("JML IMMOBILIER",64,285);
+  ctx.fillStyle="#fff"; ctx.font="800 76px Georgia"; ctx.fillText("NOUVEAU",64,405); ctx.fillText("À LA VENTE",64,490);
+  ctx.font="700 "+fitStoryText(ctx,title,W-128,38,25)+"px Arial"; ctx.fillText(title,64,570);
+  ctx.font="600 30px Arial"; ctx.fillText(location,64,625);
+  ctx.fillStyle="#e3c27d"; ctx.font="800 "+fitStoryText(ctx,price,W-128,66,38)+"px Georgia"; ctx.fillText(price,64,1450);
+  const specs=[p.surface||"",p.rooms?p.rooms+" pièces":"",p.bedrooms?p.bedrooms+" chambres":""].filter(Boolean).join(" · ");
+  if(specs){ctx.fillStyle="#fff";ctx.font="600 27px Arial";ctx.fillText(specs,64,1510);}
+  ctx.fillStyle="rgba(255,255,255,.96)";ctx.font="600 25px Arial";ctx.fillText("Découvrez ce bien avec JML Immobilier",64,1580);
+  if(logo)ctx.drawImage(logo,W-245,1640,175,56);
   ctx.restore();
-
-  const headline = String($("storyHeadline")?.value || "UN BIEN QUI MÉRITE LE DÉTOUR").trim();
-  const sub = String($("storySubheadline")?.value || "Découvrez ce que ce bien peut vous offrir").trim();
-  const name = String($("storyContactName")?.value || "Abderrahim Boujnikh").trim();
-  const role = String($("storyContactRole")?.value || "Agent commercial indépendant en immobilier").trim();
-  const phone = String($("storyContactPhone")?.value || "06 26 93 50 41").trim();
-  const cta = String($("storyContactCta")?.value || "Parlons de votre projet").trim();
-  const location = String(p.location || "").replace(/\s*\(\d{5}\)/, "").trim() || "Ardennes";
-
-  // Haut : accroche + localisation + compteur.
-  ctx.fillStyle = "rgba(23,56,47,.98)";
-  ctx.fillRect(0, 0, W, topH);
-
-  ctx.fillStyle = "#c6a15b";
-  ctx.font = "800 " + fitStoryText(ctx, headline, W - 110, 38, 22) + "px Arial";
-  ctx.textAlign = "center";
-  ctx.fillText(headline, W / 2, 332);
-
-  ctx.fillStyle = "#fff";
-  ctx.font = "600 " + fitStoryText(ctx, sub, W - 120, 24, 16) + "px Arial";
-  ctx.fillText(sub, W / 2, 371);
-
-  ctx.fillStyle = "rgba(198,161,91,.55)";
-  ctx.fillRect(60, 396, W - 120, 2);
-
-  ctx.fillStyle = "#fff";
-  ctx.font = "700 20px Arial";
-  ctx.fillText(location, W / 2, 431);
-
-  ctx.fillStyle = "#c6a15b";
-  ctx.font = "800 18px Arial";
-  ctx.fillText("JML IMMOBILIER", W / 2, 464);
-
-  ctx.fillStyle = "rgba(198,161,91,.96)";
-  ctx.beginPath();
-  ctx.roundRect(W - 178, 298, 133, 40, 20);
-  ctx.fill();
-  ctx.fillStyle = "#17382f";
-  ctx.font = "800 17px Arial";
-  ctx.fillText(String(index + 1).padStart(2, "0") + " / " + String(count).padStart(2, "0"), W - 111, 324);
-
-  // Petit bandeau dans la zone photo, uniquement pour créer de l'impact.
-  const label = storyImageLabel(index, img);
-  ctx.textAlign = "left";
-  ctx.fillStyle = "rgba(23,56,47,.92)";
-  ctx.beginPath();
-  ctx.roundRect(38, regionY + regionH - 84, Math.min(W - 76, 610), 60, 18);
-  ctx.fill();
-  ctx.fillStyle = "#c6a15b";
-  ctx.font = "800 " + fitStoryText(ctx, label, Math.min(W - 120, 530), 25, 17) + "px Arial";
-  ctx.fillText(label, 60, regionY + regionH - 46);
-
-  // Bas : prix + caractéristiques + identité/contact.
-  ctx.fillStyle = "rgba(23,56,47,.99)";
-  ctx.fillRect(0, H - bottomH, W, bottomH);
-
-  ctx.textAlign = "left";
-  ctx.fillStyle = "#c6a15b";
-  ctx.font = "800 42px Georgia";
-  ctx.fillText(p.price || "Prix", 38, H - bottomH + 45);
-
-  const specs = [p.surface || "", p.rooms ? p.rooms + " pièces" : "", p.bedrooms ? p.bedrooms + " chambres" : ""]
-    .filter(Boolean).join(" · ");
-  ctx.fillStyle = "#fff";
-  ctx.font = "700 21px Arial";
-  if (specs) ctx.fillText(specs, 38, H - bottomH + 76);
-
-  ctx.fillStyle = "rgba(198,161,91,.55)";
-  ctx.fillRect(38, H - bottomH + 94, W - 76, 2);
-
-  ctx.fillStyle = "#fff";
-  ctx.font = "800 21px Arial";
-  ctx.fillText(name, 38, H - bottomH + 126);
-
-  ctx.fillStyle = "rgba(255,255,255,.84)";
-  ctx.font = "500 16px Arial";
-  ctx.fillText(role, 38, H - bottomH + 151);
-
-  if (phone) {
-    ctx.fillStyle = "#c6a15b";
-    ctx.font = "800 21px Arial";
-    ctx.fillText("☎ " + phone, 38, H - bottomH + 185);
-  }
-
-  ctx.fillStyle = "#fff";
-  ctx.font = "800 18px Arial";
-  ctx.textAlign = "right";
-  ctx.fillText(cta, W - 38, H - bottomH + 185);
-
-  if (logo) {
-    ctx.globalAlpha = .9;
-    ctx.drawImage(logo, W - 225, H - bottomH + 112, 180, 58);
-    ctx.globalAlpha = 1;
-  }
-  ctx.textAlign = "left";
 }
-function drawStoryFinal(ctx, p, logo, W, H, progress) {
-  ctx.fillStyle = "#012517";
-  ctx.fillRect(0, 0, W, H);
 
-  const title = propertyType(p.title);
-  const location = String(p.location || "").replace(/\s*\(\d{5}\)/, "").trim() || "Ardennes";
-  const ref = p.reference || "annonce";
+function drawStoryPhotoFrame(ctx,p,img,index,count,progress,W,H,logo,clear=true) {
+  if(clear)ctx.clearRect(0,0,W,H);
+  const cover=Math.max(W/img.naturalWidth,H/img.naturalHeight),eased=progress*progress*(3-2*progress),zoom=1.005+eased*.018;
+  const dw=img.naturalWidth*cover*zoom,dh=img.naturalHeight*cover*zoom,pan=Math.sin(progress*Math.PI)*8*(index%2===0?1:-1);
+  ctx.drawImage(img,(W-dw)/2+pan,(H-dh)/2,dw,dh);
+  const top=ctx.createLinearGradient(0,0,0,720);
+  top.addColorStop(0,"rgba(0,0,0,.60)");top.addColorStop(.55,"rgba(0,0,0,.16)");top.addColorStop(1,"rgba(0,0,0,0)");
+  ctx.fillStyle=top;ctx.fillRect(0,0,W,720);
+  const bottom=ctx.createLinearGradient(0,1080,0,H);
+  bottom.addColorStop(0,"rgba(0,0,0,0)");bottom.addColorStop(.52,"rgba(0,0,0,.52)");bottom.addColorStop(1,"rgba(0,0,0,.72)");
+  ctx.fillStyle=bottom;ctx.fillRect(0,1080,W,H-1080);
+  const headline=String($("storyHeadline")?.value||"UN BIEN QUI MÉRITE LE DÉTOUR").trim();
+  const sub=String($("storySubheadline")?.value||"Découvrez ce que ce bien peut vous offrir").trim();
+  const name=String($("storyContactName")?.value||"").trim(),phone=String($("storyContactPhone")?.value||"").trim();
+  const cta=String($("storyContactCta")?.value||"Parlons de votre projet").trim();
+  const location=String(p.location||"").replace(/\s*\(\d{5}\)/,"").trim()||"Ardennes";
+  ctx.save();ctx.textAlign="left";ctx.shadowColor="rgba(0,0,0,.72)";ctx.shadowBlur=14;
+  ctx.fillStyle="#e3c27d";ctx.font="700 30px Arial";ctx.fillText("JML IMMOBILIER",62,285);
+  ctx.fillStyle="#fff";ctx.font="800 "+fitStoryText(ctx,headline,W-124,52,28)+"px Arial";ctx.fillText(headline,62,355);
+  ctx.fillStyle="rgba(255,255,255,.96)";ctx.font="500 "+fitStoryText(ctx,sub,W-124,29,20)+"px Arial";ctx.fillText(sub,62,410);
+  ctx.font="600 24px Arial";ctx.fillText(location,62,465);
+  ctx.textAlign="right";ctx.fillStyle="#fff";ctx.font="700 24px Arial";
+  ctx.fillText(String(index+1).padStart(2,"0")+" / "+String(count).padStart(2,"0"),W-62,525);
+  ctx.textAlign="left";ctx.fillStyle="#e3c27d";
+  ctx.font="800 "+fitStoryText(ctx,p.price||"Prix sur demande",W-124,60,34)+"px Georgia";ctx.fillText(p.price||"Prix sur demande",62,1450);
+  const specs=[p.surface||"",p.rooms?p.rooms+" pièces":"",p.bedrooms?p.bedrooms+" chambres":""].filter(Boolean).join(" · ");
+  if(specs){ctx.fillStyle="#fff";ctx.font="600 25px Arial";ctx.fillText(specs,62,1510);}
+  if(name){ctx.fillStyle="#fff";ctx.font="700 24px Arial";ctx.fillText(name,62,1580);}
+  if(phone){ctx.fillStyle="#fff";ctx.font="600 23px Arial";ctx.fillText(phone,62,1630);}
+  ctx.textAlign="right";ctx.fillStyle="#fff";ctx.font="700 22px Arial";ctx.fillText(cta,W-62,1690);
+  if(logo)ctx.drawImage(logo,W-230,1720,160,52);
+  ctx.restore();
+}
 
-  ctx.fillStyle = "#d0a64b";
-  ctx.font = "bold 43px Georgia";
-  ctx.textAlign = "center";
-  ctx.fillText("JML IMMOBILIER", W / 2, 230);
-
-  ctx.fillStyle = "#fff";
-  ctx.font = "bold 62px Georgia";
-  ctx.fillText("CE BIEN VOUS INTÉRESSE ?", W / 2, 420);
-
-  ctx.fillStyle = "#d0a64b";
-  ctx.font = "bold 36px Arial";
-  ctx.fillText(title + " · " + location, W / 2, 510);
-
-  ctx.fillStyle = "#fff";
-  ctx.font = "bold 76px Georgia";
-  ctx.fillText(p.price || "Prix", W / 2, 650);
-
-  ctx.fillStyle = "rgba(255,255,255,.88)";
-  ctx.font = "bold 30px Arial";
-  const specs = [p.surface || "", p.rooms ? p.rooms + " pièces" : "", p.bedrooms ? p.bedrooms + " chambres" : ""]
-    .filter(Boolean).join(" · ");
-  if (specs) ctx.fillText(specs, W / 2, 715);
-
-  ctx.fillStyle = "#fff";
-  ctx.font = "bold 35px Arial";
-  ctx.fillText("Contactez JML Immobilier", W / 2, 860);
-
-  ctx.fillStyle = "#d0a64b";
-  ctx.font = "bold 27px Arial";
-  ctx.fillText("Réf. " + ref, W / 2, 925);
-
-  if (logo) ctx.drawImage(logo, W / 2 - 170, 1040, 340, 108);
-
-  ctx.fillStyle = "rgba(208,166,75," + Math.min(1, .15 + progress * .35) + ")";
-  ctx.fillRect(80, 1120, W - 160, 4);
-
-  ctx.fillStyle = "#fff";
-  ctx.font = "bold 27px Arial";
-  ctx.fillText("Une visite ? Parlons-en.", W / 2, 1220);
-  ctx.textAlign = "left";
+function drawStoryFinal(ctx,p,logo,W,H,progress,heroImg) {
+  if(heroImg){
+    const scale=Math.max(W/heroImg.naturalWidth,H/heroImg.naturalHeight)*1.02,dw=heroImg.naturalWidth*scale,dh=heroImg.naturalHeight*scale;
+    ctx.drawImage(heroImg,(W-dw)/2,(H-dh)/2,dw,dh);
+  }else{ctx.fillStyle="#17382f";ctx.fillRect(0,0,W,H);}
+  const shade=ctx.createLinearGradient(0,0,0,H);
+  shade.addColorStop(0,"rgba(0,0,0,.25)");shade.addColorStop(.45,"rgba(0,0,0,.12)");shade.addColorStop(1,"rgba(0,0,0,.76)");
+  ctx.fillStyle=shade;ctx.fillRect(0,0,W,H);
+  const title=propertyType(p.title),location=String(p.location||"").replace(/\s*\(\d{5}\)/,"").trim()||"Ardennes";
+  const specs=[p.surface||"",p.rooms?p.rooms+" pièces":"",p.bedrooms?p.bedrooms+" chambres":""].filter(Boolean).join(" · ");
+  ctx.save();ctx.textAlign="center";ctx.shadowColor="rgba(0,0,0,.75)";ctx.shadowBlur=16;
+  ctx.fillStyle="#e3c27d";ctx.font="700 36px Arial";ctx.fillText("JML IMMOBILIER",W/2,1180);
+  ctx.fillStyle="#fff";ctx.font="800 62px Georgia";ctx.fillText("CE BIEN VOUS INTÉRESSE ?",W/2,1290);
+  ctx.fillStyle="#e3c27d";ctx.font="700 "+fitStoryText(ctx,title+" · "+location,W-120,36,23)+"px Arial";ctx.fillText(title+" · "+location,W/2,1370);
+  ctx.fillStyle="#fff";ctx.font="800 "+fitStoryText(ctx,p.price||"Prix sur demande",W-120,70,40)+"px Georgia";ctx.fillText(p.price||"Prix sur demande",W/2,1470);
+  if(specs){ctx.font="600 27px Arial";ctx.fillText(specs,W/2,1530);}
+  ctx.font="700 29px Arial";ctx.fillText("Parlons de votre projet",W/2,1640);
+  if(logo)ctx.drawImage(logo,W/2-120,1690,240,76);
+  ctx.restore();
 }
 
 async function createStoryVideo() {
@@ -1999,7 +1823,7 @@ async function createStoryVideo() {
             ctx.restore();
           }
         } else {
-          drawStoryFinal(ctx, p, logo, W, H, (elapsed - (duration - finalDuration)) / finalDuration);
+          drawStoryFinal(ctx, p, logo, W, H, (elapsed - (duration - finalDuration)) / finalDuration, loaded[loaded.length - 1]);
         }
 
         if (elapsed >= duration) { resolve(); return; }
