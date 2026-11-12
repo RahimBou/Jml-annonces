@@ -163,10 +163,10 @@ function fitText(ctx,text,maxWidth,maxSize,minSize=20,font='Arial'){
 
 function drawSlide(ctx,slide,t){
   const {img}=slide,w=ctx.canvas.width,h=ctx.canvas.height;
-  const topH=150,bottomH=190;
-  // Marges de sécurité pour l'interface Story Facebook :
-  // en haut, sous l'identité/progression ; en bas, au-dessus de la réponse et des actions.
-  const storyTopSafe=165,storyBottomSafe=170;
+  // Bandeaux plus compacts pour limiter les aplats verts tout en gardant
+  // le contenu à distance des commandes Facebook.
+  const topH=112,bottomH=138;
+  const storyTopSafe=145,storyBottomSafe=150;
   const topY=storyTopSafe;
   const bottomY=h-storyBottomSafe-bottomH;
   ctx.clearRect(0,0,w,h);
