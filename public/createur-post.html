@@ -135,22 +135,6 @@ function drawCover(ctx,img,w,h){
   ctx.drawImage(img,(w-nw)/2,(h-nh)/2,nw,nh);
 }
 
-function drawContain(ctx,img,w,h){
-  drawContainRegion(ctx,img,w,0,0,w,h);
-}
-
-function drawContainRegion(ctx,img,w,x0,y0,x1,y1){
-  const regionW=x1-x0,regionH=y1-y0;
-  const s=Math.min((regionW-28)/img.width,(regionH-28)/img.height);
-  const nw=img.width*s,nh=img.height*s;
-  const x=x0+(regionW-nw)/2,y=y0+(regionH-nh)/2;
-  ctx.drawImage(img,x,y,nw,nh);
-  ctx.save();
-  ctx.strokeStyle='#c6a15b';ctx.lineWidth=3;
-  ctx.strokeRect(x-2,y-2,nw+4,nh+4);
-  ctx.restore();
-}
-
 function fitText(ctx,text,maxWidth,maxSize,minSize=20,font='Arial'){
   let size=maxSize;
   while(size>minSize){
@@ -290,7 +274,7 @@ function renderThumbs(){
     const im=document.createElement('img');im.src=s.img.src || ''; // fallback below
     // Canvas snapshot avoids relying on a revoked object URL.
     const c=document.createElement('canvas');c.width=180;c.height=320;
-    const cx=c.getContext('2d');cx.fillStyle='#17382f';cx.fillRect(0,0,c.width,c.height);drawContain(cx,s.img,c.width,c.height);
+    const cx=c.getContext('2d');drawCover(cx,s.img,c.width,c.height);
     im.src=c.toDataURL('image/jpeg',.86);
     const n=document.createElement('span');n.textContent=String(i+1);
     box.append(im,n);$('thumbs').appendChild(box);
