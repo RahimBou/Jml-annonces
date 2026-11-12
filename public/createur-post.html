@@ -164,6 +164,11 @@ function fitText(ctx,text,maxWidth,maxSize,minSize=20,font='Arial'){
 function drawSlide(ctx,slide,t){
   const {img}=slide,w=ctx.canvas.width,h=ctx.canvas.height;
   const topH=150,bottomH=190;
+  // Marges de sécurité pour l'interface Story Facebook :
+  // en haut, sous l'identité/progression ; en bas, au-dessus de la réponse et des actions.
+  const storyTopSafe=165,storyBottomSafe=170;
+  const topY=storyTopSafe;
+  const bottomY=h-storyBottomSafe-bottomH;
   ctx.clearRect(0,0,w,h);
 
   // Fond discret : l'image reste uniquement dans la zone centrale.
@@ -175,7 +180,7 @@ function drawSlide(ctx,slide,t){
   ctx.restore();
 
   const scale=1+0.008*t;
-  const regionW=w-44,regionY=topH+10,regionH=h-topH-bottomH-20;
+  const regionW=w-44,regionY=topY+topH+10,regionH=bottomY-regionY-10;
   const s=Math.min((regionW-28)/img.width,(regionH-28)/img.height)*scale;
   const nw=img.width*s,nh=img.height*s;
   const x=(w-nw)/2,y=regionY+(regionH-nh)/2;
@@ -195,57 +200,57 @@ function drawSlide(ctx,slide,t){
   const cta=String($('contactCta')?.value||'').trim();
   const area=String($('contactArea')?.value||'').trim();
 
-  // Bandeau haut : impactant mais court.
+  // Bandeau haut : placé dans la zone sûre, sous les éléments Facebook.
   ctx.fillStyle='rgba(23,56,47,.97)';
-  ctx.fillRect(0,0,w,topH);
+  ctx.fillRect(0,topY,w,topH);
   if(headline){
     ctx.fillStyle='#c6a15b';
     const fs=fitText(ctx,headline,w-70,35,22);
     ctx.font='800 '+fs+'px Arial';
     ctx.textAlign='center';
-    ctx.fillText(headline,w/2,53);
+    ctx.fillText(headline,w/2,topY+53);
   }
   if(sub){
     ctx.fillStyle='#fff';
     const fs=fitText(ctx,sub,w-70,22,16);
     ctx.font='600 '+fs+'px Arial';
-    ctx.fillText(sub,w/2,91);
+    ctx.fillText(sub,w/2,topY+91);
   }
   ctx.fillStyle='rgba(198,161,91,.35)';
-  ctx.fillRect(60,112,w-120,2);
+  ctx.fillRect(60,topY+112,w-120,2);
   ctx.fillStyle='#fff';
   ctx.font='700 15px Arial';
-  ctx.fillText(area||'JML Immobilier',w/2,137);
+  ctx.fillText(area||'JML Immobilier',w/2,topY+137);
   ctx.textAlign='left';
 
-  // Bandeau bas : identité + fonction + téléphone + CTA.
+  // Bandeau bas : placé au-dessus des commandes et de la zone de réponse Facebook.
   ctx.fillStyle='rgba(23,56,47,.98)';
-  ctx.fillRect(0,h-bottomH,w,bottomH);
+  ctx.fillRect(0,bottomY,w,bottomH);
   ctx.fillStyle='#c6a15b';
   ctx.font='800 25px Georgia';
-  ctx.fillText(name||'JML Immobilier',32,h-bottomH+42);
+  ctx.fillText(name||'JML Immobilier',32,bottomY+42);
   ctx.fillStyle='#fff';
   ctx.font='600 17px Arial';
-  ctx.fillText(role||'Agent commercial en immobilier',32,h-bottomH+70);
+  ctx.fillText(role||'Agent commercial en immobilier',32,bottomY+70);
 
   if(phone){
     ctx.fillStyle='#c6a15b';
     ctx.font='800 24px Arial';
-    ctx.fillText('☎ '+phone,32,h-bottomH+108);
+    ctx.fillText('☎ '+phone,32,bottomY+108);
   }
   if(cta){
     ctx.fillStyle='#fff';
     ctx.font='800 19px Arial';
-    ctx.fillText(cta,32,h-bottomH+140);
+    ctx.fillText(cta,32,bottomY+140);
   }
   ctx.fillStyle='#c6a15b';
   ctx.font='700 15px Arial';
-  ctx.fillText('JML IMMOBILIER',w-190,h-bottomH+42);
+  ctx.fillText('JML IMMOBILIER',w-190,bottomY+42);
 
   // Petit repère visuel.
   ctx.fillStyle='rgba(255,255,255,.8)';
   ctx.font='14px Arial';
-  ctx.fillText('VOTRE PROJET, NOTRE ENGAGEMENT',w-300,h-bottomH+70);
+  ctx.fillText('VOTRE PROJET, NOTRE ENGAGEMENT',w-300,bottomY+70);
 }
 
 async function readZip(file){
