@@ -1068,7 +1068,7 @@ function resetCurrentListing(){
  $("socialController").textContent="Les textes seront contrôlés contre l'annonce source avant validation.";$("storyStatus").textContent="La Story sera construite à partir des photos et informations vérifiées de l'annonce.";
  $("generateStory").disabled=false;$("shareStory").disabled=true;$("downloadStory").disabled=true;$("generate").disabled=false;$("generateAI").disabled=false;$("generateSocial").disabled=false;$("load").disabled=false;$("load").focus();
 }
-$("resetListing")?.addEventListener("click",()=>{if(!currentData&&!currentStoryBlob)return;if(!confirm("Commencer une nouvelle annonce ? Les données et créations temporaires seront effacées. Les sons JML et les comptes sociaux seront conservés."))return;resetCurrentListing();});
+$("resetListing")?.addEventListener("click",()=>{if(!currentData&&!currentStoryBlob&&!$("url").value.trim())return;if(!confirm("Commencer une nouvelle annonce ? Les données et créations temporaires seront effacées. Les sons JML et les comptes sociaux seront conservés."))return;resetCurrentListing();});
 $("load").addEventListener("click", async () => {
   const url = $("url").value.trim();
   if (!url) return;
@@ -1187,7 +1187,7 @@ $("load").addEventListener("click", async () => {
     $("status").textContent = error.message;
     $("status").className = "status error";
   } finally {
-    $("load").disabled = false;
+    if (loadSequence === listingLoadSequence) $("load").disabled = false;
   }
 });
 
