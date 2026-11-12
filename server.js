@@ -984,7 +984,7 @@ app.post("/api/social/disconnect/:provider", (req, res) => {
 
 function normalizeUrl(value) {
   const url = new URL(value);
-  if (url.protocol !== "https:" || url.hostname !== JML_HOST) {
+  if (url.protocol !== "https:" || url.hostname !== JML_HOST || (url.port && url.port !== "443") || url.username || url.password) {
     throw new Error("Seules les URLs https://www.jml-immobilier.fr/ sont acceptées.");
   }
   return url.toString();
@@ -1668,12 +1668,13 @@ app.post("/api/scrape", async (req, res) => {
       const imageUrl = listing.images[index];
       try {
         const imageResponse = await fetch(imageUrl, {
+          redirect: "manual",
           headers: {
             "User-Agent": "Mozilla/5.0 (compatible; JML-Annonces/0.1; +https://www.jml-immobilier.fr/)"
           }
         });
         const contentType = imageResponse.headers.get("content-type") || "";
-        if (imageResponse.ok && contentType.startsWith("image/")) {
+        if (imageResponse.ok && imageResponse.status < 300 && contentType.startsWith("image/")) {
           validated.push({
             url: imageUrl,
             position: validated.length + 1,
@@ -2478,13 +2479,14 @@ app.get("/api/image", async (req, res) => {
     }
 
     const response = await fetch(imageUrl.toString(), {
+      redirect: "manual",
       headers: {
         "User-Agent": "Mozilla/5.0 (compatible; JML-Annonces/0.1; +https://www.jml-immobilier.fr/)"
       }
     });
 
     const contentType = response.headers.get("content-type") || "";
-    if (!response.ok || !contentType.startsWith("image/")) {
+    if (!response.ok || response.status >= 300 || !contentType.startsWith("image/")) {
       return res.status(404).end();
     }
 
