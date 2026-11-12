@@ -78,7 +78,7 @@
       <label for="url">Lien de l'annonce JML</label>
       <div class="row">
         <input id="url" placeholder="https://www.jml-immobilier.fr/vente/..." autocomplete="url">
-        <button id="load">Récupérer l'annonce</button>
+        <button id="load">Récupérer l'annonce</button><button id="resetListing" type="button" style="background:#6f746f">Nouvelle annonce</button>
       </div>
       <div id="status" class="status">Aucune donnée chargée.</div>
     </section>
@@ -271,6 +271,7 @@
 <script>
 const $ = (id) => document.getElementById(id);
 let currentData = null;
+let listingLoadSequence = 0;
 let visualPhotoSlots = [];
 let visualLoadedPhotos = null;
 let visualPhotoCacheKey = "";
@@ -1054,10 +1055,25 @@ async function renderJmlTemplate() {
   $("storySection").style.display="block";
 }
 
+function resetCurrentListing(){
+ listingLoadSequence++;if(currentStoryUrl){URL.revokeObjectURL(currentStoryUrl);currentStoryUrl=null;}currentStoryBlob=null;currentData=null;
+ visualPhotoSlots=[];visualLoadedPhotos=null;visualPhotoCacheKey="";visualPhotoTransforms={};selectedVisualPhoto=null;visualPointerDrag=null;
+ const video=$("storyVideo");if(video){video.pause();video.removeAttribute("src");video.load();video.style.display="none";}
+ const sc=$("storyCanvas");if(sc){sc.getContext("2d").clearRect(0,0,sc.width,sc.height);sc.style.display="block";}
+ const vc=$("visual");if(vc)vc.getContext("2d").clearRect(0,0,vc.width,vc.height);
+ $("url").value="";$("status").textContent="Nouvelle annonce : aucune donnée chargée.";$("status").className="status";$("result").style.display="none";
+ ["visualSection","socialSection","shareSection","storySection"].forEach(id=>{if($(id))$(id).style.display="none";});
+ $("photos").innerHTML="";$("photoStatus").textContent="";$("photoWarning").textContent="";$("photoMeta").textContent="";$("aiStatus").textContent="";
+ $("dataController").textContent="Contrôleur de données — en attente de contrôle.";$("socialCopies").querySelectorAll("p").forEach(n=>n.textContent="—");
+ $("socialController").textContent="Les textes seront contrôlés contre l'annonce source avant validation.";$("storyStatus").textContent="La Story sera construite à partir des photos et informations vérifiées de l'annonce.";
+ $("generateStory").disabled=false;$("shareStory").disabled=true;$("downloadStory").disabled=true;$("generate").disabled=false;$("generateAI").disabled=false;$("generateSocial").disabled=false;$("load").disabled=false;$("load").focus();
+}
+$("resetListing")?.addEventListener("click",()=>{if(!currentData&&!currentStoryBlob&&!$("url").value.trim())return;if(!confirm("Commencer une nouvelle annonce ? Les données et créations temporaires seront effacées. Les sons JML et les comptes sociaux seront conservés."))return;resetCurrentListing();});
 $("load").addEventListener("click", async () => {
   const url = $("url").value.trim();
   if (!url) return;
 
+  const loadSequence = ++listingLoadSequence;
   $("load").disabled = true;
   $("status").textContent = "Récupération de l'annonce et des photos originales…";
   $("status").className = "status";
@@ -1072,6 +1088,7 @@ $("load").addEventListener("click", async () => {
     const data = await response.json();
     if (!response.ok || !data.ok) throw new Error(data.error || "Impossible de récupérer l'annonce.");
 
+    if (loadSequence !== listingLoadSequence) return;
     const p = data.listing;
     currentData = data;
     const rawTitle = p.title || "Annonce JML";
@@ -1145,6 +1162,7 @@ $("load").addEventListener("click", async () => {
 
     p.images.forEach(async (src) => {
       const img = await loadOriginalPhoto(src);
+      if (loadSequence !== listingLoadSequence) return;
       finishedCount++;
 
       if (img) {
@@ -1169,7 +1187,7 @@ $("load").addEventListener("click", async () => {
     $("status").textContent = error.message;
     $("status").className = "status error";
   } finally {
-    $("load").disabled = false;
+    if (loadSequence === listingLoadSequence) $("load").disabled = false;
   }
 });
 
@@ -1560,63 +1578,23 @@ function drawStoryPill(ctx, text, x, y, bg, fg, font = "bold 30px Arial") {
 }
 
 function drawStoryIntro(ctx, p, logo, heroImg, W, H, progress) {
-  const title = propertyType(p.title);
-  const location = String(p.location || "").replace(/\s*\(\d{5}\)/, "").trim() || "Ardennes";
-  const fade = Math.min(1, progress / .18);
-
-  ctx.fillStyle = "#012517";
-  ctx.fillRect(0, 0, W, H);
-  if (heroImg) {
-    const scale = Math.max(W / heroImg.naturalWidth, H / heroImg.naturalHeight) * 1.02;
-    const dw = heroImg.naturalWidth * scale, dh = heroImg.naturalHeight * scale;
-    ctx.drawImage(heroImg, (W-dw)/2, (H-dh)/2, dw, dh);
-  }
-  ctx.fillStyle = "rgba(1,37,23,.28)";
-  ctx.fillRect(0,0,W,H);
-  storyGradient(ctx, W, H);
-
-  ctx.fillStyle = "#d0a64b";
-  ctx.font = "bold 43px Georgia";
-  ctx.fillText("JML IMMOBILIER", 60, 322);
-
-  ctx.fillStyle = "#fff";
-  ctx.font = "bold 78px Georgia";
-  ctx.fillText("NOUVEAU", 60, 435);
-  ctx.fillText("À LA VENTE", 60, 522);
-
-  drawStoryPill(ctx, title, 60, 595, "#d0a64b", "#151515", "bold 30px Arial");
-
-  ctx.fillStyle = "#fff";
-  ctx.font = "bold 43px Arial";
-  wrapStoryText(ctx, location, 850, 2).forEach((line, i) => ctx.fillText(line, 60, 675 + i * 54));
-
-  ctx.fillStyle = "rgba(1,37,23,.92)";
-  ctx.beginPath();
-  ctx.roundRect(45, H - 660, W - 90, 255, 34);
-  ctx.fill();
-
-  ctx.fillStyle = "#d0a64b";
-  ctx.font = "bold 66px Georgia";
-  ctx.fillText(p.price || "Prix", 80, H - 555);
-
-  const specs = [p.surface || "", p.rooms ? p.rooms + " pièces" : "", p.bedrooms ? p.bedrooms + " chambres" : ""]
-    .filter(Boolean).join(" · ");
-  ctx.fillStyle = "#fff";
-  ctx.font = "bold 32px Arial";
-  if (specs) ctx.fillText(specs, 80, H - 490);
-
-  ctx.fillStyle = "#fff";
-  ctx.font = "25px Arial";
-  ctx.fillText("Découvrez le bien", 80, H - 435);
-
-  if (logo) {
-    ctx.globalAlpha = .95;
-    ctx.drawImage(logo, W - 385, H - 525, 300, 96);
-    ctx.globalAlpha = 1;
-  }
-
-  ctx.fillStyle = "rgba(255,255,255," + (1 - fade) + ")";
-  ctx.fillRect(0, 0, W, H);
+ const title=propertyType(p.title), location=String(p.location||"").replace(/\s*\(\d{5}\)/,"").trim()||"Ardennes";
+ const fade=Math.max(0,Math.min(1,progress/.22));
+ ctx.fillStyle="#012517";ctx.fillRect(0,0,W,H);
+ if(heroImg){const scale=Math.max(W/heroImg.naturalWidth,H/heroImg.naturalHeight),zoom=1.015+progress*.012,dw=heroImg.naturalWidth*scale*zoom,dh=heroImg.naturalHeight*scale*zoom;ctx.drawImage(heroImg,(W-dw)/2,(H-dh)/2,dw,dh);}
+ const top=ctx.createLinearGradient(0,0,0,760);top.addColorStop(0,"rgba(1,20,13,.82)");top.addColorStop(.55,"rgba(1,20,13,.25)");top.addColorStop(1,"rgba(1,20,13,0)");ctx.fillStyle=top;ctx.fillRect(0,0,W,760);
+ const bottom=ctx.createLinearGradient(0,1050,0,H);bottom.addColorStop(0,"rgba(1,20,13,0)");bottom.addColorStop(.42,"rgba(1,20,13,.72)");bottom.addColorStop(1,"rgba(1,20,13,.96)");ctx.fillStyle=bottom;ctx.fillRect(0,1000,W,H-1000);
+ ctx.textAlign="left";ctx.fillStyle="#d0a64b";ctx.font="800 34px Arial";ctx.fillText("JML IMMOBILIER",64,285);
+ ctx.fillStyle="#fff";ctx.font="800 76px Georgia";ctx.fillText("NOUVEAU",64,405);ctx.fillText("À LA VENTE",64,490);
+ drawStoryPill(ctx,title,64,565,"#d0a64b","#17382f","800 27px Arial");
+ ctx.fillStyle="#fff";ctx.font="600 34px Arial";wrapStoryText(ctx,location,850,2).forEach((line,i)=>ctx.fillText(line,64,650+i*44));
+ ctx.fillStyle="rgba(1,25,16,.88)";ctx.beginPath();ctx.roundRect(48,1100,W-96,390,30);ctx.fill();
+ ctx.fillStyle="#d0a64b";ctx.font="800 "+fitStoryText(ctx,p.price||"Prix sur demande",W-150,64,36)+"px Georgia";ctx.fillText(p.price||"Prix sur demande",82,1200);
+ const specs=[p.surface||"",p.rooms?p.rooms+" pièces":"",p.bedrooms?p.bedrooms+" chambres":""].filter(Boolean).join(" · ");
+ ctx.fillStyle="#fff";ctx.font="600 27px Arial";if(specs)ctx.fillText(specs,82,1260);
+ ctx.fillStyle="rgba(208,166,75,.65)";ctx.fillRect(82,1290,W-164,2);ctx.fillStyle="#fff";ctx.font="700 25px Arial";ctx.fillText("Découvrez ce bien avec JML Immobilier",82,1350);
+ if(logo)ctx.drawImage(logo,W-300,1380,210,67);
+ ctx.fillStyle="rgba(255,255,255,"+(1-fade)+")";ctx.fillRect(0,0,W,H);
 }
 
 function fitStoryText(ctx, text, maxWidth, maxSize, minSize = 18) {
@@ -1626,6 +1604,7 @@ function fitStoryText(ctx, text, maxWidth, maxSize, minSize = 18) {
     if (ctx.measureText(text).width <= maxWidth) return size;
     size -= 2;
   }
+  ctx.font = "800 " + minSize + "px Arial";
   return minSize;
 }
 
@@ -1637,187 +1616,38 @@ function storyImageLabel(index, img) {
   return "UN BIEN QUI MÉRITE LE DÉTOUR";
 }
 
-function drawStoryPhotoFrame(ctx, p, img, index, count, progress, W, H, logo, clear = true) {
-  if (clear) {
-    ctx.fillStyle = "#f6f2e9";
-    ctx.fillRect(0, 0, W, H);
-  }
-
-  // Safe zones Meta (1080 × 1920) : 300 px en haut et 420 px en bas.
-  // Les informations essentielles restent dans la zone centrale visible.
-  const topH = 500;
-  const bottomH = 660;
-  // La photo occupe toute la largeur de la zone centrale : aucun cadre crème,
-  // aucun espace blanc autour des photos pendant les changements.
-  const regionY = topH;
-  const regionH = H - topH - bottomH;
-
-  // Mode "cover" + effet Ken Burns très léger : la photo remplit toute la
-  // zone puis effectue un zoom lent et fluide. L'amplitude reste volontairement
-  // discrète pour donner du mouvement sans déformer ni "secouer" le bien.
-  const coverScale = Math.max(W / img.naturalWidth, regionH / img.naturalHeight);
-  const eased = progress * progress * (3 - 2 * progress); // smoothstep
-  const zoomDirection = index % 2 === 0 ? 1 : -1;
-  const zoom = 1 + zoomDirection * (0.028 * eased) + (zoomDirection < 0 ? 0.028 : 0);
-  const scale = coverScale * zoom;
-  const dw = img.naturalWidth * scale;
-  const dh = img.naturalHeight * scale;
-
-  // Micro-mouvement horizontal opposé au zoom pour un rendu plus naturel.
-  const pan = Math.sin(progress * Math.PI) * 7 * (index % 2 === 0 ? 1 : -1);
-  const px = (W - dw) / 2 + pan;
-  const py = regionY + (regionH - dh) / 2;
-
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(0, regionY, W, regionH);
-  ctx.clip();
-  ctx.drawImage(img, px, py, dw, dh);
-  ctx.restore();
-
-  const headline = String($("storyHeadline")?.value || "UN BIEN QUI MÉRITE LE DÉTOUR").trim();
-  const sub = String($("storySubheadline")?.value || "Découvrez ce que ce bien peut vous offrir").trim();
-  const name = String($("storyContactName")?.value || "Abderrahim Boujnikh").trim();
-  const role = String($("storyContactRole")?.value || "Agent commercial indépendant en immobilier").trim();
-  const phone = String($("storyContactPhone")?.value || "06 26 93 50 41").trim();
-  const cta = String($("storyContactCta")?.value || "Parlons de votre projet").trim();
-  const location = String(p.location || "").replace(/\s*\(\d{5}\)/, "").trim() || "Ardennes";
-
-  // Haut : accroche + localisation + compteur.
-  ctx.fillStyle = "rgba(23,56,47,.98)";
-  ctx.fillRect(0, 0, W, topH);
-
-  ctx.fillStyle = "#c6a15b";
-  ctx.font = "800 " + fitStoryText(ctx, headline, W - 110, 38, 22) + "px Arial";
-  ctx.textAlign = "center";
-  ctx.fillText(headline, W / 2, 332);
-
-  ctx.fillStyle = "#fff";
-  ctx.font = "600 " + fitStoryText(ctx, sub, W - 120, 24, 16) + "px Arial";
-  ctx.fillText(sub, W / 2, 371);
-
-  ctx.fillStyle = "rgba(198,161,91,.55)";
-  ctx.fillRect(60, 396, W - 120, 2);
-
-  ctx.fillStyle = "#fff";
-  ctx.font = "700 20px Arial";
-  ctx.fillText(location, W / 2, 431);
-
-  ctx.fillStyle = "#c6a15b";
-  ctx.font = "800 18px Arial";
-  ctx.fillText("JML IMMOBILIER", W / 2, 464);
-
-  ctx.fillStyle = "rgba(198,161,91,.96)";
-  ctx.beginPath();
-  ctx.roundRect(W - 178, 298, 133, 40, 20);
-  ctx.fill();
-  ctx.fillStyle = "#17382f";
-  ctx.font = "800 17px Arial";
-  ctx.fillText(String(index + 1).padStart(2, "0") + " / " + String(count).padStart(2, "0"), W - 111, 324);
-
-  // Petit bandeau dans la zone photo, uniquement pour créer de l'impact.
-  const label = storyImageLabel(index, img);
-  ctx.textAlign = "left";
-  ctx.fillStyle = "rgba(23,56,47,.92)";
-  ctx.beginPath();
-  ctx.roundRect(38, regionY + regionH - 84, Math.min(W - 76, 610), 60, 18);
-  ctx.fill();
-  ctx.fillStyle = "#c6a15b";
-  ctx.font = "800 " + fitStoryText(ctx, label, Math.min(W - 120, 530), 25, 17) + "px Arial";
-  ctx.fillText(label, 60, regionY + regionH - 46);
-
-  // Bas : prix + caractéristiques + identité/contact.
-  ctx.fillStyle = "rgba(23,56,47,.99)";
-  ctx.fillRect(0, H - bottomH, W, bottomH);
-
-  ctx.textAlign = "left";
-  ctx.fillStyle = "#c6a15b";
-  ctx.font = "800 42px Georgia";
-  ctx.fillText(p.price || "Prix", 38, H - bottomH + 45);
-
-  const specs = [p.surface || "", p.rooms ? p.rooms + " pièces" : "", p.bedrooms ? p.bedrooms + " chambres" : ""]
-    .filter(Boolean).join(" · ");
-  ctx.fillStyle = "#fff";
-  ctx.font = "700 21px Arial";
-  if (specs) ctx.fillText(specs, 38, H - bottomH + 76);
-
-  ctx.fillStyle = "rgba(198,161,91,.55)";
-  ctx.fillRect(38, H - bottomH + 94, W - 76, 2);
-
-  ctx.fillStyle = "#fff";
-  ctx.font = "800 21px Arial";
-  ctx.fillText(name, 38, H - bottomH + 126);
-
-  ctx.fillStyle = "rgba(255,255,255,.84)";
-  ctx.font = "500 16px Arial";
-  ctx.fillText(role, 38, H - bottomH + 151);
-
-  if (phone) {
-    ctx.fillStyle = "#c6a15b";
-    ctx.font = "800 21px Arial";
-    ctx.fillText("☎ " + phone, 38, H - bottomH + 185);
-  }
-
-  ctx.fillStyle = "#fff";
-  ctx.font = "800 18px Arial";
-  ctx.textAlign = "right";
-  ctx.fillText(cta, W - 38, H - bottomH + 185);
-
-  if (logo) {
-    ctx.globalAlpha = .9;
-    ctx.drawImage(logo, W - 225, H - bottomH + 112, 180, 58);
-    ctx.globalAlpha = 1;
-  }
-  ctx.textAlign = "left";
+function drawStoryPhotoFrame(ctx,p,img,index,count,progress,W,H,logo,clear=true){
+ if(clear){ctx.fillStyle="#012517";ctx.fillRect(0,0,W,H);}
+ const cover=Math.max(W/img.naturalWidth,H/img.naturalHeight),eased=progress*progress*(3-2*progress),zoom=1.012+eased*.018,dw=img.naturalWidth*cover*zoom,dh=img.naturalHeight*cover*zoom,pan=Math.sin(progress*Math.PI)*9*(index%2===0?1:-1);
+ ctx.drawImage(img,(W-dw)/2+pan,(H-dh)/2,dw,dh);
+ const top=ctx.createLinearGradient(0,0,0,650);top.addColorStop(0,"rgba(1,20,13,.82)");top.addColorStop(.62,"rgba(1,20,13,.22)");top.addColorStop(1,"rgba(1,20,13,0)");ctx.fillStyle=top;ctx.fillRect(0,0,W,650);
+ const bottom=ctx.createLinearGradient(0,1050,0,H);bottom.addColorStop(0,"rgba(1,20,13,0)");bottom.addColorStop(.45,"rgba(1,20,13,.76)");bottom.addColorStop(1,"rgba(1,20,13,.97)");ctx.fillStyle=bottom;ctx.fillRect(0,1000,W,H-1000);
+ const headline=String($("storyHeadline")?.value||"UN BIEN QUI MÉRITE LE DÉTOUR").trim(),sub=String($("storySubheadline")?.value||"Découvrez ce que ce bien peut vous offrir").trim(),name=String($("storyContactName")?.value||"").trim(),role=String($("storyContactRole")?.value||"").trim(),phone=String($("storyContactPhone")?.value||"").trim(),cta=String($("storyContactCta")?.value||"Parlons de votre projet").trim(),location=String(p.location||"").replace(/\s*\(\d{5}\)/,"").trim()||"Ardennes";
+ ctx.textAlign="left";ctx.fillStyle="#d0a64b";ctx.font="800 26px Arial";ctx.fillText("JML IMMOBILIER",62,280);
+ ctx.fillStyle="#fff";ctx.font="800 "+fitStoryText(ctx,headline,W-124,54,30)+"px Arial";ctx.fillText(headline,62,355);
+ ctx.fillStyle="rgba(255,255,255,.92)";ctx.font="500 "+fitStoryText(ctx,sub,W-124,28,19)+"px Arial";ctx.fillText(sub,62,405);
+ ctx.fillStyle="rgba(255,255,255,.9)";ctx.font="600 24px Arial";ctx.fillText(location,62,455);
+ drawStoryPill(ctx,String(index+1).padStart(2,"0")+" / "+String(count).padStart(2,"0"),W-205,520,"rgba(208,166,75,.96)","#17382f","800 22px Arial");
+ ctx.fillStyle="rgba(1,25,16,.86)";ctx.beginPath();ctx.roundRect(42,1100,W-84,390,28);ctx.fill();
+ ctx.fillStyle="#d0a64b";ctx.font="800 "+fitStoryText(ctx,p.price||"Prix sur demande",W-130,58,34)+"px Georgia";ctx.fillText(p.price||"Prix sur demande",76,1190);
+ const specs=[p.surface||"",p.rooms?p.rooms+" pièces":"",p.bedrooms?p.bedrooms+" chambres":""].filter(Boolean).join(" · ");
+ ctx.fillStyle="#fff";ctx.font="600 25px Arial";if(specs)ctx.fillText(specs,76,1245);
+ ctx.fillStyle="rgba(208,166,75,.62)";ctx.fillRect(76,1270,W-152,2);ctx.fillStyle="#fff";ctx.font="700 24px Arial";if(name)ctx.fillText(name,76,1320);
+ ctx.fillStyle="rgba(255,255,255,.82)";ctx.font="500 18px Arial";if(role)ctx.fillText(role,76,1353);
+ ctx.fillStyle="#d0a64b";ctx.font="800 23px Arial";if(phone)ctx.fillText("☎ "+phone,76,1405);
+ ctx.textAlign="right";ctx.fillStyle="#fff";ctx.font="700 22px Arial";ctx.fillText(cta,W-76,1405);if(logo)ctx.drawImage(logo,W-230,1430,155,50);ctx.textAlign="left";
 }
-function drawStoryFinal(ctx, p, logo, W, H, progress) {
-  ctx.fillStyle = "#012517";
-  ctx.fillRect(0, 0, W, H);
 
-  const title = propertyType(p.title);
-  const location = String(p.location || "").replace(/\s*\(\d{5}\)/, "").trim() || "Ardennes";
-  const ref = p.reference || "annonce";
-
-  ctx.fillStyle = "#d0a64b";
-  ctx.font = "bold 43px Georgia";
-  ctx.textAlign = "center";
-  ctx.fillText("JML IMMOBILIER", W / 2, 230);
-
-  ctx.fillStyle = "#fff";
-  ctx.font = "bold 62px Georgia";
-  ctx.fillText("CE BIEN VOUS INTÉRESSE ?", W / 2, 420);
-
-  ctx.fillStyle = "#d0a64b";
-  ctx.font = "bold 36px Arial";
-  ctx.fillText(title + " · " + location, W / 2, 510);
-
-  ctx.fillStyle = "#fff";
-  ctx.font = "bold 76px Georgia";
-  ctx.fillText(p.price || "Prix", W / 2, 650);
-
-  ctx.fillStyle = "rgba(255,255,255,.88)";
-  ctx.font = "bold 30px Arial";
-  const specs = [p.surface || "", p.rooms ? p.rooms + " pièces" : "", p.bedrooms ? p.bedrooms + " chambres" : ""]
-    .filter(Boolean).join(" · ");
-  if (specs) ctx.fillText(specs, W / 2, 715);
-
-  ctx.fillStyle = "#fff";
-  ctx.font = "bold 35px Arial";
-  ctx.fillText("Contactez JML Immobilier", W / 2, 860);
-
-  ctx.fillStyle = "#d0a64b";
-  ctx.font = "bold 27px Arial";
-  ctx.fillText("Réf. " + ref, W / 2, 925);
-
-  if (logo) ctx.drawImage(logo, W / 2 - 170, 1040, 340, 108);
-
-  ctx.fillStyle = "rgba(208,166,75," + Math.min(1, .15 + progress * .35) + ")";
-  ctx.fillRect(80, 1120, W - 160, 4);
-
-  ctx.fillStyle = "#fff";
-  ctx.font = "bold 27px Arial";
-  ctx.fillText("Une visite ? Parlons-en.", W / 2, 1220);
-  ctx.textAlign = "left";
+function drawStoryFinal(ctx,p,logo,W,H,progress){
+ ctx.fillStyle="#012517";ctx.fillRect(0,0,W,H);const title=propertyType(p.title),location=String(p.location||"").replace(/\s*\(\d{5}\)/,"").trim()||"Ardennes",ref=p.reference||"annonce",fade=Math.max(0,Math.min(1,progress/.25));
+ ctx.textAlign="center";ctx.fillStyle="#d0a64b";ctx.font="800 38px Arial";ctx.fillText("JML IMMOBILIER",W/2,330);
+ ctx.fillStyle="#fff";ctx.font="800 66px Georgia";ctx.fillText("CE BIEN VOUS INTÉRESSE ?",W/2,500);
+ ctx.fillStyle="#d0a64b";ctx.font="700 "+fitStoryText(ctx,title+" · "+location,W-120,38,24)+"px Arial";ctx.fillText(title+" · "+location,W/2,590);
+ ctx.fillStyle="rgba(255,255,255,.96)";ctx.font="800 "+fitStoryText(ctx,p.price||"Prix sur demande",W-120,76,42)+"px Georgia";ctx.fillText(p.price||"Prix sur demande",W/2,760);
+ const specs=[p.surface||"",p.rooms?p.rooms+" pièces":"",p.bedrooms?p.bedrooms+" chambres":""].filter(Boolean).join(" · ");ctx.fillStyle="rgba(255,255,255,.86)";ctx.font="600 29px Arial";if(specs)ctx.fillText(specs,W/2,830);
+ if(logo)ctx.drawImage(logo,W/2-145,1000,290,92);ctx.fillStyle="#d0a64b";ctx.font="700 32px Arial";ctx.fillText("Contactez JML Immobilier",W/2,1240);
+ ctx.fillStyle="#fff";ctx.font="600 28px Arial";ctx.fillText("Une visite ? Parlons-en.",W/2,1310);ctx.fillStyle="rgba(255,255,255,.72)";ctx.font="500 21px Arial";ctx.fillText("Réf. "+ref,W/2,1380);
+ ctx.fillStyle="rgba(208,166,75,"+(.25+fade*.55)+")";ctx.fillRect(120,1440,W-240,3);ctx.textAlign="left";
 }
 
 async function createStoryVideo() {
@@ -1839,6 +1669,10 @@ async function createStoryVideo() {
   shareButton.disabled = true;
   downloadButton.disabled = true;
   status.textContent = "⏳ Création de la Story JML…";
+  let activeStoryStream = null;
+  let activeStoryAudioContext = null;
+  let activeStoryAudioSource = null;
+  let activeStoryRecorder = null;
 
   try {
     const p = currentData.listing;
@@ -1859,6 +1693,7 @@ async function createStoryVideo() {
     currentStoryBlob = null;
 
     const stream = canvas.captureStream(fps);
+    activeStoryStream = stream;
     let audioContext = null;
     let audioSource = null;
     let audioGain = null;
@@ -1870,6 +1705,7 @@ async function createStoryVideo() {
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
       if (!AudioCtx) throw new Error("Ce navigateur ne permet pas d'intégrer une piste audio.");
       audioContext = new AudioCtx();
+      activeStoryAudioContext = audioContext;
       await audioContext.resume();
 
       let audioBuffer;
@@ -1884,6 +1720,7 @@ async function createStoryVideo() {
       audioStartOffset = Math.min(storyAudioStartSeconds, Math.max(0, audioBuffer.duration - 0.05));
       audioPlaybackDuration = Math.max(0.05, Math.min(duration, audioBuffer.duration - audioStartOffset));
       audioSource = audioContext.createBufferSource();
+      activeStoryAudioSource = audioSource;
       audioSource.buffer = audioBuffer;
       audioSource.loop = false;
       audioGain = audioContext.createGain();
@@ -1899,6 +1736,7 @@ async function createStoryVideo() {
       videoBitsPerSecond: 6000000,
       audioBitsPerSecond: selectedStoryAudioId ? 128000 : undefined
     });
+    activeStoryRecorder = recorder;
     const chunks = [];
     recorder.ondataavailable = e => { if (e.data?.size) chunks.push(e.data); };
     const recordingDone = new Promise((resolve, reject) => {
@@ -2015,7 +1853,12 @@ async function createStoryVideo() {
     const blob = await recordingDone;
     if (audioContext) {
       try { await audioContext.close(); } catch {}
+      activeStoryAudioContext = null;
     }
+    activeStoryStream?.getTracks().forEach(track => track.stop());
+    activeStoryStream = null;
+    activeStoryAudioSource = null;
+    activeStoryRecorder = null;
     if (!blob || blob.size < 1000) throw new Error("La vidéo générée est vide.");
 
     currentStoryBlob = blob;
@@ -2034,6 +1877,16 @@ async function createStoryVideo() {
   } catch (error) {
     status.textContent = "🔴 " + (error.message || "Impossible de créer la Story.");
   } finally {
+    if (activeStoryRecorder && activeStoryRecorder.state !== "inactive") {
+      try { activeStoryRecorder.stop(); } catch {}
+    }
+    if (activeStoryAudioSource) {
+      try { activeStoryAudioSource.stop(); } catch {}
+    }
+    activeStoryStream?.getTracks().forEach(track => track.stop());
+    if (activeStoryAudioContext) {
+      try { await activeStoryAudioContext.close(); } catch {}
+    }
     button.disabled = false;
   }
 }

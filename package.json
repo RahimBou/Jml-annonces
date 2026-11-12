@@ -5,7 +5,8 @@
   "description": "Générateur de publications JML Immobilier à partir d'une annonce JML.",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "check": "node scripts/check-syntax.js"
   },
   "engines": {
     "node": ">=20"

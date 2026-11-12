@@ -984,7 +984,7 @@ app.post("/api/social/disconnect/:provider", (req, res) => {
 
 function normalizeUrl(value) {
   const url = new URL(value);
-  if (url.protocol !== "https:" || url.hostname !== JML_HOST) {
+  if (url.protocol !== "https:" || url.hostname !== JML_HOST || (url.port && url.port !== "443") || url.username || url.password) {
     throw new Error("Seules les URLs https://www.jml-immobilier.fr/ sont acceptées.");
   }
   return url.toString();
@@ -1527,28 +1527,18 @@ function extractPrice($, bodyText) {
     "meta[property='product:price:amount']",
     "meta[itemprop='price']"
   ];
-
   for (const selector of selectors) {
+    let found = null;
     $(selector).each((_, el) => {
-      if (extractPrice.value) return;
-      const raw = $(el).attr("content") || $(el).text();
-      const parsed = parsePrice(raw);
-      if (parsed) extractPrice.value = parsed;
+      if (found) return;
+      found = parsePrice($(el).attr("content") || $(el).text());
     });
-    if (extractPrice.value) break;
+    if (found) return found;
   }
-
-  if (extractPrice.value) {
-    const value = extractPrice.value;
-    extractPrice.value = null;
-    return value;
-  }
-
   const matches = [...bodyText.matchAll(/([0-9][0-9 .]{2,})\s*€/g)]
     .map((m) => m[1].replace(/\s+/g, " ").trim() + " €");
   return matches.length ? matches[0] : null;
 }
-extractPrice.value = null;
 
 function parseListing(html, sourceUrl) {
   const $ = cheerio.load(html);
@@ -1649,10 +1639,17 @@ app.post("/api/scrape", async (req, res) => {
   try {
     const sourceUrl = normalizeUrl(req.body?.url);
     const response = await fetch(sourceUrl, {
+      redirect: "manual",
       headers: {
         "User-Agent": "Mozilla/5.0 (compatible; JML-Annonces/0.1; +https://www.jml-immobilier.fr/)"
       }
     });
+    if (response.status >= 300 && response.status < 400) {
+      return res.status(400).json({
+        ok: false,
+        error: "La redirection de l'annonce a été bloquée. Utilise directement l'URL JML canonique."
+      });
+    }
 
     if (!response || !response.ok) {
       return res.status(502).json({
@@ -1671,12 +1668,13 @@ app.post("/api/scrape", async (req, res) => {
       const imageUrl = listing.images[index];
       try {
         const imageResponse = await fetch(imageUrl, {
+          redirect: "manual",
           headers: {
             "User-Agent": "Mozilla/5.0 (compatible; JML-Annonces/0.1; +https://www.jml-immobilier.fr/)"
           }
         });
         const contentType = imageResponse.headers.get("content-type") || "";
-        if (imageResponse.ok && contentType.startsWith("image/")) {
+        if (imageResponse.ok && imageResponse.status < 300 && contentType.startsWith("image/")) {
           validated.push({
             url: imageUrl,
             position: validated.length + 1,
@@ -1706,7 +1704,16 @@ app.post("/api/scrape", async (req, res) => {
     const photoComplete =
       listing.imageCount > 0 &&
       !listing.photoExtraction.suspicious &&
-      (listing.expectedPhotoCount == null || listing.imageCount === listing.expectedPhotoCount);
+      (listing.expectedPhotoCount == null
+        ? listing.imageCount >= 2
+        : listing.imageCount === listing.expectedPhotoCount);
+
+    if (listing.expectedPhotoCount == null && listing.imageCount < 2) {
+      listing.photoExtraction.suspicious = true;
+      listing.photoExtraction.reasons.push(
+        "Une seule photo a été vérifiée et aucun compteur fiable ne permet de confirmer que la galerie est complète."
+      );
+    }
 
     listing.photoStatus =
       listing.imageCount === 0
@@ -2239,7 +2246,7 @@ app.post("/api/social-copy", async (req, res) => {
     let successfulModel = model;
 
     if (geminiKey) {
-          let response = await fetch(
+          response = await fetch(
             "https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":generateContent",
             {
               method:"POST",
@@ -2472,13 +2479,14 @@ app.get("/api/image", async (req, res) => {
     }
 
     const response = await fetch(imageUrl.toString(), {
+      redirect: "manual",
       headers: {
         "User-Agent": "Mozilla/5.0 (compatible; JML-Annonces/0.1; +https://www.jml-immobilier.fr/)"
       }
     });
 
     const contentType = response.headers.get("content-type") || "";
-    if (!response.ok || !contentType.startsWith("image/")) {
+    if (!response.ok || response.status >= 300 || !contentType.startsWith("image/")) {
       return res.status(404).end();
     }
 
