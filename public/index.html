@@ -1588,12 +1588,12 @@ function drawStoryIntro(ctx, p, logo, heroImg, W, H, progress) {
  ctx.fillStyle="#fff";ctx.font="800 76px Georgia";ctx.fillText("NOUVEAU",64,405);ctx.fillText("À LA VENTE",64,490);
  drawStoryPill(ctx,title,64,565,"#d0a64b","#17382f","800 27px Arial");
  ctx.fillStyle="#fff";ctx.font="600 34px Arial";wrapStoryText(ctx,location,850,2).forEach((line,i)=>ctx.fillText(line,64,650+i*44));
- ctx.fillStyle="rgba(1,25,16,.88)";ctx.beginPath();ctx.roundRect(48,1190,W-96,390,30);ctx.fill();
- ctx.fillStyle="#d0a64b";ctx.font="800 "+fitStoryText(ctx,p.price||"Prix sur demande",W-150,64,36)+"px Georgia";ctx.fillText(p.price||"Prix sur demande",82,1290);
+ ctx.fillStyle="rgba(1,25,16,.88)";ctx.beginPath();ctx.roundRect(48,1100,W-96,390,30);ctx.fill();
+ ctx.fillStyle="#d0a64b";ctx.font="800 "+fitStoryText(ctx,p.price||"Prix sur demande",W-150,64,36)+"px Georgia";ctx.fillText(p.price||"Prix sur demande",82,1200);
  const specs=[p.surface||"",p.rooms?p.rooms+" pièces":"",p.bedrooms?p.bedrooms+" chambres":""].filter(Boolean).join(" · ");
- ctx.fillStyle="#fff";ctx.font="600 27px Arial";if(specs)ctx.fillText(specs,82,1350);
- ctx.fillStyle="rgba(208,166,75,.65)";ctx.fillRect(82,1380,W-164,2);ctx.fillStyle="#fff";ctx.font="700 25px Arial";ctx.fillText("Découvrez ce bien avec JML Immobilier",82,1440);
- if(logo)ctx.drawImage(logo,W-300,1470,210,67);
+ ctx.fillStyle="#fff";ctx.font="600 27px Arial";if(specs)ctx.fillText(specs,82,1260);
+ ctx.fillStyle="rgba(208,166,75,.65)";ctx.fillRect(82,1290,W-164,2);ctx.fillStyle="#fff";ctx.font="700 25px Arial";ctx.fillText("Découvrez ce bien avec JML Immobilier",82,1350);
+ if(logo)ctx.drawImage(logo,W-300,1380,210,67);
  ctx.fillStyle="rgba(255,255,255,"+(1-fade)+")";ctx.fillRect(0,0,W,H);
 }
 
@@ -1628,14 +1628,14 @@ function drawStoryPhotoFrame(ctx,p,img,index,count,progress,W,H,logo,clear=true)
  ctx.fillStyle="rgba(255,255,255,.92)";ctx.font="500 "+fitStoryText(ctx,sub,W-124,28,19)+"px Arial";ctx.fillText(sub,62,405);
  ctx.fillStyle="rgba(255,255,255,.9)";ctx.font="600 24px Arial";ctx.fillText(location,62,455);
  drawStoryPill(ctx,String(index+1).padStart(2,"0")+" / "+String(count).padStart(2,"0"),W-205,520,"rgba(208,166,75,.96)","#17382f","800 22px Arial");
- ctx.fillStyle="rgba(1,25,16,.86)";ctx.beginPath();ctx.roundRect(42,1210,W-84,375,28);ctx.fill();
- ctx.fillStyle="#d0a64b";ctx.font="800 "+fitStoryText(ctx,p.price||"Prix sur demande",W-130,58,34)+"px Georgia";ctx.fillText(p.price||"Prix sur demande",76,1300);
+ ctx.fillStyle="rgba(1,25,16,.86)";ctx.beginPath();ctx.roundRect(42,1100,W-84,390,28);ctx.fill();
+ ctx.fillStyle="#d0a64b";ctx.font="800 "+fitStoryText(ctx,p.price||"Prix sur demande",W-130,58,34)+"px Georgia";ctx.fillText(p.price||"Prix sur demande",76,1190);
  const specs=[p.surface||"",p.rooms?p.rooms+" pièces":"",p.bedrooms?p.bedrooms+" chambres":""].filter(Boolean).join(" · ");
- ctx.fillStyle="#fff";ctx.font="600 25px Arial";if(specs)ctx.fillText(specs,76,1355);
- ctx.fillStyle="rgba(208,166,75,.62)";ctx.fillRect(76,1380,W-152,2);ctx.fillStyle="#fff";ctx.font="700 24px Arial";if(name)ctx.fillText(name,76,1430);
- ctx.fillStyle="rgba(255,255,255,.82)";ctx.font="500 18px Arial";if(role)ctx.fillText(role,76,1463);
- ctx.fillStyle="#d0a64b";ctx.font="800 23px Arial";if(phone)ctx.fillText("☎ "+phone,76,1520);
- ctx.textAlign="right";ctx.fillStyle="#fff";ctx.font="700 22px Arial";ctx.fillText(cta,W-76,1520);if(logo)ctx.drawImage(logo,W-230,1540,155,50);ctx.textAlign="left";
+ ctx.fillStyle="#fff";ctx.font="600 25px Arial";if(specs)ctx.fillText(specs,76,1245);
+ ctx.fillStyle="rgba(208,166,75,.62)";ctx.fillRect(76,1270,W-152,2);ctx.fillStyle="#fff";ctx.font="700 24px Arial";if(name)ctx.fillText(name,76,1320);
+ ctx.fillStyle="rgba(255,255,255,.82)";ctx.font="500 18px Arial";if(role)ctx.fillText(role,76,1353);
+ ctx.fillStyle="#d0a64b";ctx.font="800 23px Arial";if(phone)ctx.fillText("☎ "+phone,76,1405);
+ ctx.textAlign="right";ctx.fillStyle="#fff";ctx.font="700 22px Arial";ctx.fillText(cta,W-76,1405);if(logo)ctx.drawImage(logo,W-230,1430,155,50);ctx.textAlign="left";
 }
 
 function drawStoryFinal(ctx,p,logo,W,H,progress){
