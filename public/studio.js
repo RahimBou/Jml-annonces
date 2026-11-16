@@ -50,7 +50,7 @@ $("saveProject").onclick=saveProject;$("loadProject").onclick=loadProject;
 $("newProject").onclick=()=>{if(!confirm("Créer un nouveau projet ? Les modifications non enregistrées seront perdues."))return;pages=[{background:"#f6f2e9",objects:[]}];pageIndex=0;window.currentJmlProjectId=null;projectName="Ma création JML";renderPages();select(null);draw();status("Nouveau projet.")};
 async function exportOne(){const a=document.createElement("a");a.download="JML-Studio-page-"+(pageIndex+1)+".png";a.href=canvas.toDataURL("image/png");a.click()}
 $("exportPage").onclick=exportOne;
-$("exportPage").addEventListener("contextmenu",e=>e.preventDefault());
+$("exportZip").onclick=exportAll;
 async function exportAll(){if(!window.JSZip){for(let i=0;i<pages.length;i++){pageIndex=i;draw();await new Promise(r=>setTimeout(r,100));await exportOne()}return}const zip=new JSZip(),original=pageIndex;for(let i=0;i<pages.length;i++){pageIndex=i;draw();await new Promise(r=>setTimeout(r,80));zip.file("page-"+(i+1)+".png",canvas.toDataURL("image/png").split(",")[1],{base64:true})}pageIndex=original;draw();const blob=await zip.generateAsync({type:"blob"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="JML-Studio-carrousel.zip";a.click();setTimeout(()=>URL.revokeObjectURL(a.href),30000)}
 $("exportPage").ondblclick=exportAll;
 renderTemplates();fitCanvas();renderPages();openDB().then(async d=>{db=d;await refreshProjects()}).catch(()=>status("Sauvegarde locale indisponible dans ce navigateur."));
