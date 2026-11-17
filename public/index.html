@@ -70,7 +70,6 @@
       <div style="margin-top:12px">
         <a href="/createur-post.html" style="display:inline-block;background:#c6a15b;color:#17382f;padding:9px 13px;border-radius:9px;text-decoration:none;font-weight:800">🎬 Créer un post vidéo à partir d’un ZIP</a>
         <a href="/studio.html" style="display:inline-block;background:#f6f2e9;color:#17382f;padding:9px 13px;border-radius:9px;text-decoration:none;font-weight:800;margin-left:8px">✦ Ouvrir JML Studio</a>
-        <a href="/studio.html" style="display:inline-block;background:#f6f2e9;color:#17382f;padding:9px 13px;border-radius:9px;text-decoration:none;font-weight:800;margin-left:8px">✦ Ouvrir JML Studio</a>
       </div>
     </div>
   </header>
@@ -499,7 +498,8 @@ async function initStoryAudioLibrary() {
     try {
       for (const file of files) {
         if (!file.type.startsWith("audio/")) continue;
-        if (file.size > 30 * 1024 * 1024) {          throw new Error("« " + file.name + " » dépasse 30 Mo.");
+        if (file.size > 30 * 1024 * 1024) {
+          throw new Error("« " + file.name + " » dépasse 30 Mo.");
         }
         await storyAudioPut(file);
       }
@@ -998,7 +998,8 @@ async function renderJmlTemplate() {
     ctx.textAlign="center";
     ctx.fillText("◆",x+34,HIGHLIGHTS_Y+53);
     ctx.textAlign="left";
-    ctx.fillStyle=WHITE;    drawTwoLineFit(ctx,item,x+58,HIGHLIGHTS_Y+52,colW-72,18,10);
+    ctx.fillStyle=WHITE;
+    drawTwoLineFit(ctx,item,x+58,HIGHLIGHTS_Y+52,colW-72,18,10);
   });
 
   // CONTACT FOOTER — fixed bottom area.
@@ -1497,7 +1498,8 @@ function storyMimeType() {
 function wrapStoryText(ctx, text, maxWidth, maxLines = 2) {
   const words = String(text || "").trim().split(/\s+/).filter(Boolean);
   const lines = [];
-  let line = "";  for (const word of words) {
+  let line = "";
+  for (const word of words) {
     const candidate = line ? line + " " + word : word;
     if (ctx.measureText(candidate).width <= maxWidth) {
       line = candidate;
@@ -1996,7 +1998,8 @@ async function createStoryVideo() {
             ctx.globalAlpha = a;
             ctx.drawImage(nextCanvas, 0, 0, W, H);
             ctx.restore();
-          }        } else {
+          }
+        } else {
           drawStoryFinal(ctx, p, logo, W, H, (elapsed - (duration - finalDuration)) / finalDuration);
         }
 
