@@ -15,8 +15,9 @@ app.post("/api/import-annonce",async(req,res)=>{
   if(!response.ok)throw new Error("JML Immobilier a répondu avec le statut HTTP "+response.status+".");
   const html=await response.text();
   const listing=parseListing(html,url);
+  const originalPhotoCount=listing.images.length;
   const validated=[];
-  for(const imageUrl of listing.images){
+  for(const imageUrl of listing.images.slice(0,8)){
    try{
     const imageResponse=await fetch(imageUrl,{headers:{"User-Agent":"Mozilla/5.0 (compatible; JML-Studio/1.0; +https://www.jml-immobilier.fr/)"},signal:AbortSignal.timeout(20000)});
     const type=imageResponse.headers.get("content-type")||"";
@@ -30,7 +31,7 @@ app.post("/api/import-annonce",async(req,res)=>{
   listing.imageCount=validated.length;
   const complete=validated.length>0&&!listing.photoExtraction.suspicious&&(listing.expectedPhotoCount==null||validated.length===listing.expectedPhotoCount);
   listing.photoStatus=validated.length===0?"unreliable":complete?"complete":"partial";
-  res.json({ok:true,listing:{title:listing.title,reference:listing.reference,price:listing.price,location:listing.location,surface:listing.surface,terrain:listing.terrain,rooms:listing.rooms,bedrooms:listing.bedrooms,description:listing.description,highlights:listing.highlights,sourceUrl:url,photoStatus:listing.photoStatus,expectedPhotoCount:listing.expectedPhotoCount,photoExtraction:listing.photoExtraction},photos:validated,photoCount:validated.length,sourcePhotoCount:listing.imageCount});
+  res.json({ok:true,listing:{title:listing.title,reference:listing.reference,price:listing.price,location:listing.location,surface:listing.surface,terrain:listing.terrain,rooms:listing.rooms,bedrooms:listing.bedrooms,description:listing.description,highlights:listing.highlights,sourceUrl:url,photoStatus:listing.photoStatus,expectedPhotoCount:listing.expectedPhotoCount,photoExtraction:listing.photoExtraction},photos:validated,photoCount:validated.length,sourcePhotoCount:originalPhotoCount});
  }catch(error){res.status(400).json({ok:false,error:error.message||"Import impossible."})}
 });
 app.get("/api/health",(req,res)=>res.json({ok:true,service:"jml-studio-independent"}));
