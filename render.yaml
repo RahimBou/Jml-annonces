@@ -5,3 +5,13 @@ services:
     buildCommand: npm install
     startCommand: npm start
     autoDeploy: true
+
+  - type: web
+    name: jml-studio-test
+    runtime: node
+    plan: free
+    branch: feature/jml-studio-standalone
+    rootDir: jml-studio
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
