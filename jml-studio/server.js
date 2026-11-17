@@ -34,5 +34,5 @@ app.post("/api/import-annonce",async(req,res)=>{
  }catch(error){res.status(400).json({ok:false,error:error.message||"Import impossible."})}
 });
 app.get("/api/health",(req,res)=>res.json({ok:true,service:"jml-studio-independent"}));
-app.get("*",(req,res)=>res.sendFile(path.join(__dirname,"index.html")));
+app.get(/.*/,(req,res)=>res.sendFile(path.join(__dirname,"index.html")));
 app.listen(PORT,()=>console.log("JML Studio indépendant démarré sur "+PORT));
