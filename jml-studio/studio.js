@@ -36,6 +36,48 @@ $("objectHeight").oninput=event=>{if(selected()){selected().height=+event.target
 $("format").onchange=()=>{fitCanvas();status("Format modifié. Les éléments restent sur la page.")};
 function fileData(file){return new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(reader.error);reader.readAsDataURL(file)})}
 $("imageFiles").onchange=async event=>{try{for(const file of [...event.target.files]){if(!file.type.startsWith("image/"))continue;const data=await fileData(file),image=await getImage(data),scale=Math.min(760/image.width,760/image.height,1),width=image.width*scale,height=image.height*scale,object={id:uid(),type:"image",data,name:file.name,x:(canvas.width-width)/2,y:(canvas.height-height)/2,width,height,opacity:1};page().objects.push(object);select(object.id)}status("Photo(s) ajoutée(s). Les images sont chargées avant l'export.")}catch(error){status("Import photo impossible : "+error.message)}finally{event.target.value=""}};
+async function importListing(){
+ const input=$("listingUrl"),button=$("importListing"),summary=$("importSummary"),url=String(input.value||"").trim();
+ if(!url){status("Colle d’abord le lien d’une annonce JML Immobilier.");input.focus();return}
+ button.disabled=true;button.textContent="Récupération…";summary.hidden=true;
+ try{
+  const response=await fetch("/api/import-annonce",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({url})});
+  const result=await response.json();
+  if(!response.ok||!result.ok)throw new Error(result.error||"Import de l’annonce impossible.");
+  const listing=result.listing,photos=result.photos||[];
+  if(!photos.length)throw new Error("Les informations ont été lues, mais aucune photo originale n’a pu être récupérée. Vérifie la galerie de l’annonce.");
+  const loaded=[];
+  for(const photo of photos){const image=await getImage(photo.data);loaded.push({data:photo.data,name:photo.name,width:image.naturalWidth,height:image.naturalHeight})}
+  const facts=[listing.surface,listing.terrain,listing.rooms?listing.rooms+" pièces":null,listing.bedrooms?listing.bedrooms+" chambres":null].filter(Boolean).join(" · ");
+  const title=listing.title||"Bien immobilier à découvrir";
+  pages=loaded.map((photo,index)=>{
+   const [w,h]=sizes.portrait;
+   const maxW=w-100,maxH=700,scale=Math.min(maxW/photo.width,maxH/photo.height);
+   const iw=Math.round(photo.width*scale),ih=Math.round(photo.height*scale);
+   const x=Math.round((w-iw)/2),y=110;
+   const objects=[
+    {id:uid(),type:"text",text:"JML IMMOBILIER",x:60,y:35,width:w-120,height:50,fontSize:28,font:"Arial",weight:"700",color:"#c6a15b",opacity:1},
+    {id:uid(),type:"image",data:photo.data,name:photo.name,x,y,width:iw,height:ih,opacity:1}
+   ];
+   if(index===0){
+    objects.push({id:uid(),type:"text",text:title.toUpperCase(),x:65,y:Math.min(y+ih+35,900),width:w-130,height:105,fontSize:48,font:"Georgia",weight:"700",color:"#17382f",opacity:1});
+    objects.push({id:uid(),type:"text",text:[listing.location,listing.price].filter(Boolean).join("  ·  "),x:65,y:Math.min(y+ih+150,1040),width:w-130,height:65,fontSize:34,font:"Arial",weight:"700",color:"#a47e39",opacity:1});
+    if(facts)objects.push({id:uid(),type:"text",text:facts,x:65,y:Math.min(y+ih+225,1120),width:w-130,height:70,fontSize:27,font:"Arial",weight:"600",color:"#17382f",opacity:1});
+   }else{
+    objects.push({id:uid(),type:"text",text:title,x:65,y:900,width:w-130,height:110,fontSize:38,font:"Georgia",weight:"700",color:"#17382f",opacity:1});
+    objects.push({id:uid(),type:"text",text:[listing.location,listing.price,facts].filter(Boolean).join("  ·  "),x:65,y:1030,width:w-130,height:100,fontSize:27,font:"Arial",weight:"600",color:"#a47e39",opacity:1});
+   }
+   return {background:"#f6f2e9",objects};
+  });
+  pageIndex=0;selectedId=null;projectName="Annonce "+(listing.reference||listing.location||"JML");
+  $("format").value="portrait";window.currentJmlProjectId=null;fitCanvas();renderPages();select(null);
+  summary.hidden=false;summary.textContent=title+" · "+(listing.location||"Localisation non détectée")+" · "+photos.length+" photo(s) importée(s)"+(listing.photoStatus==="partial"?" · Galerie partielle":"");
+  status("Annonce importée : "+photos.length+" photo(s) originale(s), "+pages.length+" page(s) créées. Tu peux maintenant modifier les visuels.");
+ }catch(error){status("Import impossible : "+error.message);summary.hidden=false;summary.textContent=error.message}
+ finally{button.disabled=false;button.textContent="Importer l’annonce"}
+}
+$("importListing").onclick=importListing;
+$("listingUrl").addEventListener("keydown",event=>{if(event.key==="Enter")importListing()});
 function renderTemplates(){$("templates").replaceChildren();(window.JML_TEMPLATES||[]).forEach(template=>{const button=document.createElement("button");button.className="template-card";const swatch=document.createElement("div");swatch.className="template-swatch";swatch.style.background=template.bg;swatch.style.color=template.accent;swatch.textContent="JML";const label=document.createElement("strong");label.textContent=template.name;button.append(swatch,label);button.onclick=()=>applyTemplate(template);$("templates").append(button)})}
 function applyTemplate(template){page().background=template.bg;page().objects=[{id:uid(),type:"text",text:template.title,x:70,y:canvas.height*.24,width:canvas.width-140,height:canvas.height*.18,fontSize:Math.round(canvas.width*.055),font:"Georgia",color:template.accent,weight:"700",opacity:1},{id:uid(),type:"text",text:template.subtitle,x:75,y:canvas.height*.43,width:canvas.width-150,height:canvas.height*.14,fontSize:Math.round(canvas.width*.027),font:"Arial",color:template.layout==="editorial"?"#17382f":"#f6f2e9",weight:"600",opacity:1}];if(template.layout==="property")page().objects.push({id:uid(),type:"rect",x:70,y:canvas.height*.66,width:canvas.width-140,height:canvas.height*.2,color:template.accent,opacity:.95});select(null);draw();status("Modèle « "+template.name+" » appliqué. Ajoute tes photos et adapte les textes.")}
 function renderPages(){$("pages").replaceChildren();pages.forEach((item,index)=>{const button=document.createElement("button");button.className="page-chip"+(index===pageIndex?" active":"");button.textContent="Page "+(index+1);button.onclick=()=>{pageIndex=index;select(null);renderPages();draw()};$("pages").append(button)});$("pageLabel").textContent="Page "+(pageIndex+1)+" / "+pages.length}
