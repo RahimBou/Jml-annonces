@@ -97,4 +97,11 @@ function makeZip(entries){const encoder=new TextEncoder(),local=[],central=[];le
 async function exportAll(){try{const entries=[];for(let index=0;index<pages.length;index++){status("Préparation de la page "+(index+1)+" / "+pages.length+"…");const blob=await renderPageBlob(index);entries.push({name:"page-"+(index+1)+".png",bytes:new Uint8Array(await blob.arrayBuffer())})}download(makeZip(entries),"JML-Studio-carrousel.zip");status("Export ZIP terminé : "+entries.length+" page(s).")}catch(error){status("Export ZIP impossible : "+error.message)}}
 $("exportZip").onclick=exportAll;
 renderTemplates();fitCanvas();renderPages();openDB().then(async database=>{db=database;await refreshProjects()}).catch(()=>status("Sauvegarde locale indisponible dans ce navigateur."));
+// Arrivée depuis JML Annonce : l'URL source est transmise dans ?listing=...
+const incomingListing=new URLSearchParams(location.search).get("listing");
+if(incomingListing){
+ $("listingUrl").value=incomingListing;
+ history.replaceState({},document.title,location.pathname);
+ importListing();
+}
 })();
