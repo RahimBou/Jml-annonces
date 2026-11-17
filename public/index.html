@@ -269,6 +269,15 @@
     </div>
   </section>
 
+
+<section id="jmlStudioBottom" style="max-width:1100px;margin:32px auto 48px;padding:22px;background:#fff;border:1px solid #e8e2d5;border-radius:16px">
+  <h2 style="margin:0 0 8px;color:#17382f">✦ Créer un visuel avec JML Studio</h2>
+  <p style="margin:0 0 16px;color:#66736d;font-size:14px">Importe une annonce publiée sur JML Immobilier pour préparer tes publications et Stories avec ses informations et ses photos.</p>
+  <label for="jmlStudioListingUrl" style="display:block;font-weight:700;color:#17382f;font-size:13px;margin-bottom:6px">Lien de l'annonce JML Immobilier</label>
+  <div style="display:flex;gap:9px;flex-wrap:wrap"><input id="jmlStudioListingUrl" type="url" inputmode="url" placeholder="https://www.jml-immobilier.fr/vente/..." style="flex:1;min-width:220px;padding:12px;border:1px solid #d9d6cc;border-radius:9px;font:inherit"><button id="jmlStudioImportBottom" type="button" style="border:0;border-radius:9px;background:#17382f;color:#fff;font-weight:800;padding:12px 18px;cursor:pointer">Importer dans JML Studio ↗</button></div>
+  <p id="jmlStudioBottomStatus" role="status" aria-live="polite" style="margin:10px 0 0;color:#66736d;font-size:12px">Colle le lien d'une annonce JML pour commencer.</p>
+</section>
+
 <script>
 const $ = (id) => document.getElementById(id);
 let currentData = null;
@@ -1317,17 +1326,42 @@ function currentListingUrl() {
   return $("url").value.trim();
 }
 
-// JML Studio est un service séparé : on lui transmet l'URL publique de l'annonce.
+// JML Studio autonome : transmet uniquement l'URL publique de l'annonce.
+const JML_STUDIO_URL = "https://jml-studio-test.onrender.com/";
+function openListingInJmlStudio(rawUrl, statusElement) {
+  let listingUrl;
+  try {
+    listingUrl = new URL(String(rawUrl || "").trim());
+    if (listingUrl.protocol !== "https:" || !/(^|\.)jml-immobilier\.fr$/i.test(listingUrl.hostname)) {
+      throw new Error("Utilise un lien HTTPS provenant de jml-immobilier.fr.");
+    }
+  } catch (error) {
+    if (statusElement) statusElement.textContent = error.message || "Lien d'annonce invalide.";
+    else alert(error.message || "Lien d'annonce invalide.");
+    return;
+  }
+  const destination = new URL(JML_STUDIO_URL);
+  destination.searchParams.set("listing", listingUrl.toString());
+  window.open(destination.toString(), "_blank", "noopener,noreferrer");
+}
+$("jmlStudioImportBottom")?.addEventListener("click", () => {
+  const input = $("jmlStudioListingUrl");
+  const status = $("jmlStudioBottomStatus");
+  if (!input?.value?.trim()) {
+    status.textContent = "Colle d'abord le lien de l'annonce JML Immobilier.";
+    input?.focus();
+    return;
+  }
+  openListingInJmlStudio(input.value, status);
+});
 $("openJmlStudio")?.addEventListener("click", event => {
+  event.preventDefault();
   const listingUrl = currentListingUrl();
   if (!currentData?.listing || !listingUrl) {
-    event.preventDefault();
     alert("Récupère d'abord une annonce JML avant de l'ouvrir dans JML Studio.");
     return;
   }
-  const destination = new URL("https://jml-studio-test.onrender.com/");
-  destination.searchParams.set("listing", listingUrl);
-  event.currentTarget.href = destination.toString();
+  openListingInJmlStudio(listingUrl);
 });
 
 
