@@ -69,7 +69,7 @@
       <div class="tagline">Annonces Auto — publications & Stories vidéo à partir des vraies annonces JML · v0.9.2</div>
       <div style="margin-top:12px">
         <a href="/createur-post.html" style="display:inline-block;background:#c6a15b;color:#17382f;padding:9px 13px;border-radius:9px;text-decoration:none;font-weight:800">🎬 Créer un post vidéo à partir d’un ZIP</a>
-        <a href="/studio.html" style="display:inline-block;background:#f6f2e9;color:#17382f;padding:9px 13px;border-radius:9px;text-decoration:none;font-weight:800;margin-left:8px">✦ Ouvrir JML Studio</a>
+        <a id="openJmlStudio" href="https://jml-studio-test.onrender.com/" target="_blank" rel="noopener noreferrer" style="display:inline-block;background:#f6f2e9;color:#17382f;padding:9px 13px;border-radius:9px;text-decoration:none;font-weight:800;margin-left:8px">✦ Ouvrir JML Studio</a>
       </div>
     </div>
   </header>
@@ -1316,6 +1316,20 @@ if (new URLSearchParams(location.search).get("social") === "connected") {
 function currentListingUrl() {
   return $("url").value.trim();
 }
+
+// JML Studio est un service séparé : on lui transmet l'URL publique de l'annonce.
+$("openJmlStudio")?.addEventListener("click", event => {
+  const listingUrl = currentListingUrl();
+  if (!currentData?.listing || !listingUrl) {
+    event.preventDefault();
+    alert("Récupère d'abord une annonce JML avant de l'ouvrir dans JML Studio.");
+    return;
+  }
+  const destination = new URL("https://jml-studio-test.onrender.com/");
+  destination.searchParams.set("listing", listingUrl);
+  event.currentTarget.href = destination.toString();
+});
+
 
 function currentSocialText(platform) {
   return $(platform + "Copy")?.textContent?.trim() || "";
