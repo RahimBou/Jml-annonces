@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#17382f">
+<meta name="description" content="JML Studio — éditeur graphique indépendant pour les créations immobilières.">
+<title>JML Studio — Création graphique</title>
+<link rel="stylesheet" href="./studio.css">
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="./index.html" aria-label="Accueil JML Studio">JML <span>STUDIO</span></a>
+  <div class="top-actions">
+    <button id="newProject" class="ghost">Nouveau</button>
+    <button id="saveProject">Enregistrer</button>
+    <button id="exportPage" class="gold">Exporter PNG</button>
+    <button id="exportZip" class="ghost">Exporter ZIP</button>
+  </div>
+</header>
+<main class="app">
+  <aside class="sidebar">
+    <section><h2>Format</h2><select id="format">
+      <option value="square">Publication carrée · 1080 × 1080</option>
+      <option value="portrait">Portrait · 1080 × 1350</option>
+      <option value="story">Story · 1080 × 1920</option>
+      <option value="landscape">Paysage · 1200 × 630</option>
+    </select></section>
+    <section><h2>Modèles JML</h2><div id="templates" class="template-list"></div></section>
+    <section><h2>Ajouter</h2>
+      <label class="file-button">＋ Ajouter des photos<input id="imageFiles" type="file" accept="image/*" multiple hidden></label>
+      <button id="addText" class="wide">＋ Ajouter un texte</button>
+      <button id="addRect" class="wide secondary">＋ Ajouter une forme</button>
+    </section>
+    <section><h2>Pages</h2><div id="pages" class="pages"></div><button id="addPage" class="wide secondary">＋ Nouvelle page</button></section>
+    <section><h2>Projets sur cet appareil</h2>
+      <select id="projectList"><option value="">Choisir un projet…</option></select>
+      <button id="loadProject" class="wide secondary">Ouvrir le projet</button>
+    </section>
+  </aside>
+  <section class="workspace">
+    <div class="canvas-toolbar"><span id="pageLabel">Page 1 / 1</span><div>
+      <button id="deleteObject" class="danger">Supprimer</button><button id="bringFront" class="secondary">Premier plan</button>
+    </div></div>
+    <div class="canvas-stage"><canvas id="designCanvas" width="1080" height="1080" aria-label="Aperçu de la création graphique"></canvas></div>
+    <p class="hint">Sélectionne un élément pour le déplacer. Utilise la poignée en bas à droite pour le redimensionner.</p>
+  </section>
+  <aside class="properties">
+    <h2>Personnalisation</h2>
+    <div id="emptySelection" class="muted">Sélectionne un texte, une photo ou une forme pour modifier ses propriétés.</div>
+    <div id="objectProperties" hidden>
+      <label id="textField">Texte<textarea id="objectText" rows="3"></textarea></label>
+      <label>Couleur<input id="objectColor" type="color" value="#17382f"></label>
+      <label>Taille du texte<input id="objectFontSize" type="range" min="12" max="140" value="56"><output id="fontSizeValue">56 px</output></label>
+      <label>Police<select id="objectFont"><option>Arial</option><option>Georgia</option><option>Verdana</option><option>Times New Roman</option></select></label>
+      <label>Opacité<input id="objectOpacity" type="range" min="10" max="100" value="100"></label>
+      <label>Largeur<input id="objectWidth" type="range" min="40" max="1200" value="400"></label>
+      <label>Hauteur<input id="objectHeight" type="range" min="30" max="1920" value="160"></label>
+    </div>
+    <div class="brand-note"><strong>Identité JML</strong><p>Vert profond · Or · Crème. Le logo officiel peut être ajouté comme image dans la création.</p></div>
+    <div id="status" role="status" aria-live="polite">JML Studio prêt à créer.</div>
+  </aside>
+</main>
+<script src="./studio-templates.js"></script>
+<script src="./studio.js"></script>
+</body>
+</html>
