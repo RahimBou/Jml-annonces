@@ -14,7 +14,7 @@ Paramètres attendus pour le service Studio :
 - **Root Directory** : `jml-studio`
 - **Build Command** : `npm install`
 - **Start Command** : `npm start`
-- **Health check path** : `/api/health)
+- **Health check path** : `/api/health`
 
 Le fichier `jml-studio/render.yaml` est un rappel de configuration cohérent avec le Blueprint racine. Il ne remplace pas la configuration du Blueprint racine.
 
